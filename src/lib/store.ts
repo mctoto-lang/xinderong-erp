@@ -16,13 +16,16 @@ interface AppState {
 
   dbInitialized: boolean;
   setDbInitialized: (init: boolean) => void;
+
+  showWelcome: boolean;
+  setShowWelcome: (show: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   isAuthenticated: false,
   currentUser: null,
-  login: (user) => set({ isAuthenticated: true, currentUser: user }),
-  logout: () => set({ isAuthenticated: false, currentUser: null }),
+  login: (user) => set({ isAuthenticated: true, currentUser: user, showWelcome: false }),
+  logout: () => set({ isAuthenticated: false, currentUser: null, showWelcome: true }),
 
   activeModule: 'dashboard',
   setActiveModule: (module) => set({ activeModule: module }),
@@ -33,4 +36,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   dbInitialized: false,
   setDbInitialized: (init) => set({ dbInitialized: init }),
+
+  showWelcome: true,
+  setShowWelcome: (show) => set({ showWelcome: show }),
 }));

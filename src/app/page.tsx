@@ -2,6 +2,7 @@
 
 import { useAppStore } from '@/lib/store';
 import LoginPage from '@/components/pages/LoginPage';
+import WelcomePage from '@/components/pages/WelcomePage';
 import { AppSidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import Dashboard from '@/components/pages/Dashboard';
@@ -33,9 +34,12 @@ const pages: Record<string, React.ComponentType> = {
 };
 
 export default function Home() {
-  const { isAuthenticated, activeModule } = useAppStore();
+  const { isAuthenticated, activeModule, showWelcome } = useAppStore();
 
   if (!isAuthenticated) {
+    if (showWelcome) {
+      return <WelcomePage />;
+    }
     return <LoginPage />;
   }
 
