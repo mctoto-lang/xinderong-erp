@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+*.log
+.env*
+!.env.example
+data
+upload
+download
+参考文件
+.zscripts
+examples
+mini-services
+*.md

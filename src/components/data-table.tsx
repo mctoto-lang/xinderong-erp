@@ -69,7 +69,7 @@ export interface UnifiedOrder {
   party: string;
   amount: number;
   status: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 interface DataTableProps {
