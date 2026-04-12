@@ -139,7 +139,7 @@ export default function CustomerManagement() {
 
   const viewDetail = async (c: Customer) => {
     setSelected(c);
-    const related = salesOrders.filter(o => o.customerId === c.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10);
+    const related = salesOrders.filter(o => o.customerId === c.id).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 10);
     setRecentOrders(related);
     setShowDetail(true);
   };

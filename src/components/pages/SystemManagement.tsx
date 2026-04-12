@@ -68,7 +68,7 @@ export default function SystemManagement() {
       setUsers(u);
       setPurchaseCategories(pc.filter(c => c.category === 'purchase'));
       setSaleCategories(sc.filter(c => c.category === 'sale'));
-      setAuditLogs(logs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      setAuditLogs(logs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
       const [name, addr, phone] = await Promise.all([
         dbSystemSettings.getByKey('companyName'),
         dbSystemSettings.getByKey('companyAddress'),

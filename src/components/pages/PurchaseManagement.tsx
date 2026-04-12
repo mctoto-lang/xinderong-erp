@@ -125,7 +125,12 @@ export default function PurchaseManagement() {
   }>>([{ productId: '', productName: '', spec: '', weight: 0, unitPrice: 0 }]);
 
   // Payment form
-  const [paymentForm, setPaymentForm] = useState({
+  const [paymentForm, setPaymentForm] = useState<{
+    amount: number;
+    method: string;
+    date: string;
+    remark: string;
+  }>({
     amount: 0,
     method: PAYMENT_METHODS[0],
     date: getTodayStr(),

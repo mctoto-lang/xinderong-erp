@@ -118,7 +118,7 @@ export default function SupplierManagement() {
 
   const viewDetail = async (s: Supplier) => {
     setSelected(s);
-    const related = purchaseOrders.filter(o => o.supplierId === s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10);
+    const related = purchaseOrders.filter(o => o.supplierId === s.id).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 10);
     setRecentOrders(related);
     setShowDetail(true);
   };

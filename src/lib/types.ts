@@ -4,13 +4,13 @@
 export interface User {
   id: string;
   username: string;
-  password: string; // 简单哈希，仅用于演示
+  password: string;
   name: string;
   role: 'admin' | 'accountant' | 'sales' | 'readonly';
   status: 'active' | 'disabled';
   lastLoginAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Customer {
@@ -22,8 +22,8 @@ export interface Customer {
   level: 'A' | 'B' | 'C' | 'D';
   creditLimit: number;
   remark: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Supplier {
@@ -35,8 +35,8 @@ export interface Supplier {
   mainProducts: string;
   rating: 'A' | 'B' | 'C' | 'D';
   remark: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ProductCategory {
@@ -46,8 +46,8 @@ export interface ProductCategory {
   spec: string;
   sort: number;
   status: 'active' | 'disabled';
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type OrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
@@ -68,8 +68,8 @@ export interface PurchaseOrder {
   paymentStatus: PaymentStatus;
   remark: string;
   createdBy: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface PurchaseOrderItem {
@@ -81,8 +81,8 @@ export interface PurchaseOrderItem {
   weight: number;
   unitPrice: number;
   amount: number;
-  outputWeight?: number; // 成品重量
-  yieldRate?: number; // 成品率
+  outputWeight?: number;
+  yieldRate?: number;
 }
 
 export interface PaymentRecord {
@@ -90,11 +90,11 @@ export interface PaymentRecord {
   orderId: string;
   orderType: 'purchase' | 'sale';
   amount: number;
-  method: string; // 银行转账/现金/微信/支付宝
+  method: string;
   date: string;
   remark: string;
   createdBy: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface SalesOrder {
@@ -132,7 +132,7 @@ export interface CollectionRecord {
   date: string;
   remark: string;
   createdBy: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface ProductionOrder {
@@ -145,8 +145,8 @@ export interface ProductionOrder {
   avgYieldRate: number;
   remark: string;
   createdBy: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ProductionOrderItem {
@@ -155,7 +155,7 @@ export interface ProductionOrderItem {
   productId: string;
   productName: string;
   inputWeight: number;
-  currentStock: number; // 当前原料库存参考
+  currentStock: number;
   outputWeight: number;
   yieldRate: number;
   remark: string;
@@ -169,8 +169,8 @@ export interface Inventory {
   finishedProductStock: number;
   warningThreshold: number;
   status: 'normal' | 'warning';
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface InventoryLog {
@@ -183,7 +183,7 @@ export interface InventoryLog {
   balance: number;
   remark: string;
   operator: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface LogisticsRecord {
@@ -198,8 +198,8 @@ export interface LogisticsRecord {
   toAddress: string;
   status: LogisticsStatus;
   remark: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SystemSetting {
@@ -214,7 +214,7 @@ export interface AuditLog {
   module: string;
   action: string;
   detail: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface Notification {
@@ -223,10 +223,9 @@ export interface Notification {
   title: string;
   content: string;
   isRead: boolean;
-  createdAt: string;
+  createdAt?: string;
 }
 
-// Navigation module type
 export type ModuleKey =
   | 'dashboard'
   | 'purchase'
