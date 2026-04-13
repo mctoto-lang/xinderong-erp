@@ -5,7 +5,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json package-lock.json* ./
 
 RUN npm config set registry https://registry.npmmirror.com \
   && npm install --legacy-peer-deps
@@ -16,7 +16,7 @@ RUN npm run build
 FROM node:20-alpine AS runner
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
-  && apk add --no-cache python3
+  && apk add --no-cache python3 make g++
 
 WORKDIR /app
 
@@ -29,6 +29,8 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+RUN mkdir -p /app/node_modules/better-sqlite3
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
