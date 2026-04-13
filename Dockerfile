@@ -1,16 +1,19 @@
 FROM node:20-alpine AS builder
 
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
-RUN npm install -g bun
+COPY package.json ./
 
-COPY package.json bun.lock* package-lock.json* ./
-RUN bun install --frozen-lockfile || npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
 
 FROM node:20-alpine AS runner
+
+RUN apk add --no-cache python3
 
 WORKDIR /app
 
@@ -20,9 +23,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
