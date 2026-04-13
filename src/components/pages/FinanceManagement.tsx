@@ -11,7 +11,7 @@ import {
   Pagination, PaginationContent, PaginationItem, PaginationLink,
   PaginationPrevious, PaginationNext, PaginationEllipsis,
 } from '@/components/ui/pagination';
-import { Search, FileDown } from 'lucide-react';
+import { Search, FileDown, CreditCard, Wallet, ArrowLeftRight, TrendingUp } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { dbPurchaseOrders, dbSalesOrders, dbPaymentRecords, dbCollectionRecords } from '@/lib/api';
 import { formatMoney, formatDate } from '@/lib/format';
@@ -147,10 +147,10 @@ export default function FinanceManagement() {
 
       <Tabs defaultValue="payable">
         <TabsList className="bg-gray-100">
-          <TabsTrigger value="payable">应付账款</TabsTrigger>
-          <TabsTrigger value="receivable">应收账款</TabsTrigger>
-          <TabsTrigger value="cashflow">收支流水</TabsTrigger>
-          <TabsTrigger value="profit">利润分析</TabsTrigger>
+          <TabsTrigger value="payable"><CreditCard className="h-4 w-4 mr-1.5" />应付账款</TabsTrigger>
+          <TabsTrigger value="receivable"><Wallet className="h-4 w-4 mr-1.5" />应收账款</TabsTrigger>
+          <TabsTrigger value="cashflow"><ArrowLeftRight className="h-4 w-4 mr-1.5" />收支流水</TabsTrigger>
+          <TabsTrigger value="profit"><TrendingUp className="h-4 w-4 mr-1.5" />利润分析</TabsTrigger>
         </TabsList>
 
         {/* Payable */}

@@ -89,7 +89,8 @@ export default function InventoryManagement() {
       inventoryRows.push({ ...item, displayType: '成品库存', displayStock: item.finishedProductStock });
     }
     if (item.rawMaterialStock === 0 && item.finishedProductStock === 0) {
-      inventoryRows.push({ ...item, displayType: item.category || '原料库存', displayStock: 0 });
+      const displayType = item.category === '成品' ? '成品库存' : '原料库存';
+      inventoryRows.push({ ...item, displayType, displayStock: 0 });
     }
   }
 
