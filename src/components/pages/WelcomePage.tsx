@@ -345,23 +345,13 @@ export default function WelcomePage() {
                 initial={{ y: 100 }}
                 animate={{ y: 0 }}
                 transition={{ delay: 0.2, duration: 1, ease: [0.22, 1, 0.36, 1] }}
-                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extralight tracking-tight"
+                className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extralight tracking-tight leading-tight"
               >
-                {COMPANY_NAME}
+                <span>衡阳鑫德荣新材料</span>
+                <br />
+                <span className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl">科技有限公司</span>
               </motion.h1>
             </div>
-
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.5, duration: 0.8 }}
-              className="flex items-center gap-4"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-white/40" />
-              <p className="text-sm md:text-base lg:text-lg text-white/40 font-light tracking-widest uppercase">
-                {COMPANY_SUBTITLE}
-              </p>
-            </motion.div>
           </motion.div>
 
           <motion.div
