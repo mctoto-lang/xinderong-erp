@@ -24,14 +24,14 @@ const CHART_COLORS = [
 ];
 
 const GRADIENT_COLORS = [
-  { start: '#3b82f6', end: '#8b5cf6' },
-  { start: '#10b981', end: '#06b6d4' },
-  { start: '#f59e0b', end: '#ef4444' },
-  { start: '#ec4899', end: '#8b5cf6' },
-  { start: '#6366f1', end: '#3b82f6' },
-  { start: '#14b8a6', end: '#10b981' },
-  { start: '#f97316', end: '#f59e0b' },
-  { start: '#84cc16', end: '#22c55e' },
+  { start: '#93c5fd', end: '#c4b5fd' },
+  { start: '#6ee7b7', end: '#67e8f9' },
+  { start: '#fcd34d', end: '#fca5a5' },
+  { start: '#f9a8d4', end: '#c4b5fd' },
+  { start: '#a5b4fc', end: '#93c5fd' },
+  { start: '#5eead4', end: '#6ee7b7' },
+  { start: '#fdba74', end: '#fcd34d' },
+  { start: '#bef264', end: '#86efac' },
 ];
 
 export default function ChartAnalysis() {
@@ -275,8 +275,8 @@ export default function ChartAnalysis() {
                 <BarChart accessibilityLayer data={poAvgPriceData} layout="vertical">
                   <defs>
                     <linearGradient id="avgPriceGradient" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#8b5cf6" />
+                      <stop offset="0%" stopColor="#93c5fd" />
+                      <stop offset="100%" stopColor="#c4b5fd" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid horizontal={false} />
@@ -322,8 +322,8 @@ export default function ChartAnalysis() {
                   <BarChart accessibilityLayer data={soAmountRankData} layout="vertical">
                     <defs>
                       <linearGradient id="amountGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#10b981" />
-                        <stop offset="100%" stopColor="#06b6d4" />
+                        <stop offset="0%" stopColor="#6ee7b7" />
+                        <stop offset="100%" stopColor="#67e8f9" />
                       </linearGradient>
                     </defs>
                     <CartesianGrid horizontal={false} />
@@ -342,8 +342,8 @@ export default function ChartAnalysis() {
                   <BarChart accessibilityLayer data={soWeightRankData} layout="vertical">
                     <defs>
                       <linearGradient id="weightGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#f59e0b" />
-                        <stop offset="100%" stopColor="#ef4444" />
+                        <stop offset="0%" stopColor="#fcd34d" />
+                        <stop offset="100%" stopColor="#fca5a5" />
                       </linearGradient>
                     </defs>
                     <CartesianGrid horizontal={false} />

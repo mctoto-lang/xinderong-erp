@@ -17,18 +17,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Pencil, Trash2, Save, Settings, Users, ShoppingCart, Truck, FileText } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Save, Settings, Users, ShoppingCart, Truck, FileText, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
-import { dbUsers, dbProductCategories, dbSystemSettings, dbAuditLogs } from '@/lib/api';
+import { dbUsers, dbProductCategories, dbSystemSettings, dbAuditLogs, dbPurchaseOrders, dbPurchaseOrderItems, dbSalesOrders, dbSalesOrderItems, dbSuppliers, dbCustomers, dbInventory, dbInventoryLogs } from '@/lib/api';
+import * as XLSX from 'xlsx';
 import { useAppStore } from '@/lib/store';
 import { COMPANY_NAME } from '@/lib/constants';
-import { formatDateTime } from '@/lib/format';
 import { USER_ROLES } from '@/lib/constants';
+import { formatDateTime, generateId, getTodayStr } from '@/lib/format';
 import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import type { User, ProductCategory, AuditLog, SystemSetting } from '@/lib/types';
+import type { User, ProductCategory, AuditLog, SystemSetting, Supplier, Customer } from '@/lib/types';
 
 export default function SystemManagement() {
   const { currentUser } = useAppStore();
@@ -36,6 +37,8 @@ export default function SystemManagement() {
   const [purchaseCategories, setPurchaseCategories] = useState<ProductCategory[]>([]);
   const [saleCategories, setSaleCategories] = useState<ProductCategory[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [settings, setSettings] = useState({ companyName: COMPANY_NAME, companyAddress: '', companyPhone: '' });
@@ -59,16 +62,20 @@ export default function SystemManagement() {
   const initialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
     try {
-      const [u, pc, sc, logs] = await Promise.all([
+      const [u, pc, sc, logs, sups, custs] = await Promise.all([
         dbUsers.getAll(),
         dbProductCategories.getAll(),
         dbProductCategories.getAll(),
         dbAuditLogs.getAll(),
+        dbSuppliers.getAll(),
+        dbCustomers.getAll(),
       ]);
       setUsers(u);
       setPurchaseCategories(pc.filter(c => c.category === 'purchase'));
       setSaleCategories(sc.filter(c => c.category === 'sale'));
       setAuditLogs(logs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
+      setSuppliers(sups);
+      setCustomers(custs);
       const [name, addr, phone] = await Promise.all([
         dbSystemSettings.getByKey('companyName'),
         dbSystemSettings.getByKey('companyAddress'),
@@ -136,6 +143,196 @@ export default function SystemManagement() {
   const filteredPurchaseCats = purchaseCategories.filter(c => !catSearch || c.name.includes(catSearch));
   const filteredSaleCats = saleCategories.filter(c => !catSearch || c.name.includes(catSearch));
 
+  const downloadPurchaseTemplate = () => {
+    const headers = ['订单日期', '供应商名称', '产品名称', '规格', '重量(KG)', '单价(元)', '运费(元)', '备注'];
+    const example = ['2024-01-15', '供应商A', '产品名称1', '规格描述', '100', '10.5', '50', '备注信息'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '进货订单导入模板');
+    XLSX.writeFile(wb, '进货订单导入模板.xlsx');
+  };
+
+  const downloadSalesTemplate = () => {
+    const headers = ['订单日期', '客户名称', '产品名称', '重量(KG)', '单价(元)', '运费(元)', '备注'];
+    const example = ['2024-01-15', '客户A', '产品名称1', '100', '15.5', '30', '备注信息'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '出货订单导入模板');
+    XLSX.writeFile(wb, '出货订单导入模板.xlsx');
+  };
+
+  const handleImportPurchase = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+      if (rows.length < 2) { toast.error('文件为空或格式错误'); return; }
+      const headers = rows[0] as string[];
+      const dateIdx = headers.findIndex(h => h.includes('日期'));
+      const supplierIdx = headers.findIndex(h => h.includes('供应商'));
+      const productIdx = headers.findIndex(h => h.includes('产品'));
+      const specIdx = headers.findIndex(h => h.includes('规格'));
+      const weightIdx = headers.findIndex(h => h.includes('重量'));
+      const priceIdx = headers.findIndex(h => h.includes('单价'));
+      const freightIdx = headers.findIndex(h => h.includes('运费'));
+      const remarkIdx = headers.findIndex(h => h.includes('备注'));
+      if (dateIdx === -1 || supplierIdx === -1 || productIdx === -1 || weightIdx === -1 || priceIdx === -1) {
+        toast.error('模板格式错误，请下载最新模板'); return;
+      }
+      let successCount = 0;
+      let errorCount = 0;
+      const orderMap: Record<string, { items: Array<{ productName: string; spec: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        if (!row[dateIdx] || !row[productIdx]) continue;
+        const date = String(row[dateIdx] || '').trim();
+        const supplierName = String(row[supplierIdx] || '').trim();
+        const productName = String(row[productIdx] || '').trim();
+        const spec = String(row[specIdx] || '').trim();
+        const weight = Number(row[weightIdx]) || 0;
+        const unitPrice = Number(row[priceIdx]) || 0;
+        const freight = Number(row[freightIdx]) || 0;
+        const remark = String(row[remarkIdx] || '').trim();
+        if (!supplierName) { errorCount++; continue; }
+        const key = `${date}-${supplierName}`;
+        if (!orderMap[key]) orderMap[key] = { items: [], freight: 0, remark: '' };
+        orderMap[key].items.push({ productName, spec, weight, unitPrice });
+        orderMap[key].freight = Math.max(orderMap[key].freight, freight);
+        orderMap[key].remark = remark || orderMap[key].remark;
+      }
+      for (const [key, data] of Object.entries(orderMap)) {
+        const [date, supplierName] = key.split('-');
+        const supplier = suppliers.find(s => s.name === supplierName);
+        if (!supplier) { errorCount += data.items.length; continue; }
+        const totalAmount = data.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + data.freight;
+        const res = await fetch(`/api/orderNo?prefix=JHD&date=${date}`);
+        const { orderNo } = await res.json();
+        const order = await dbPurchaseOrders.add({
+          orderNo, date, supplierId: supplier.id, supplierName: supplier.name,
+          totalAmount, freight: data.freight, paidAmount: 0, unpaidAmount: totalAmount,
+          paymentStatus: 'unpaid', remark: data.remark, createdBy: currentUser?.name || '',
+        });
+        await dbPurchaseOrderItems.addBatch(data.items.map(item => ({
+          orderId: order.id, productId: generateId(), productName: item.productName,
+          spec: item.spec, weight: item.weight, unitPrice: item.unitPrice, amount: item.weight * item.unitPrice,
+        })));
+        for (const item of data.items) {
+          const allInv = await dbInventory.getAll();
+          let inv = allInv.find(i => i.productName === item.productName);
+          if (!inv) {
+            inv = await dbInventory.add({
+              productName: item.productName, category: '原料', rawMaterialStock: 0,
+              finishedProductStock: 0, warningThreshold: 100, status: 'normal',
+            });
+          }
+          const newRaw = inv.rawMaterialStock + item.weight;
+          await dbInventory.put({ ...inv, rawMaterialStock: newRaw });
+          await dbInventoryLogs.add({
+            inventoryId: inv.id, productName: item.productName, logType: '批量导入',
+            relatedOrderNo: orderNo, quantity: item.weight, balance: newRaw,
+            remark: `批量导入进货单 ${orderNo}`, operator: currentUser?.name || '',
+          });
+        }
+        successCount += data.items.length;
+      }
+      await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '进货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
+      toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error('导入失败，请检查文件格式');
+    }
+    e.target.value = '';
+  };
+
+  const handleImportSales = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+      if (rows.length < 2) { toast.error('文件为空或格式错误'); return; }
+      const headers = rows[0] as string[];
+      const dateIdx = headers.findIndex(h => h.includes('日期'));
+      const customerIdx = headers.findIndex(h => h.includes('客户'));
+      const productIdx = headers.findIndex(h => h.includes('产品'));
+      const weightIdx = headers.findIndex(h => h.includes('重量'));
+      const priceIdx = headers.findIndex(h => h.includes('单价'));
+      const freightIdx = headers.findIndex(h => h.includes('运费'));
+      const remarkIdx = headers.findIndex(h => h.includes('备注'));
+      if (dateIdx === -1 || customerIdx === -1 || productIdx === -1 || weightIdx === -1 || priceIdx === -1) {
+        toast.error('模板格式错误，请下载最新模板'); return;
+      }
+      let successCount = 0;
+      let errorCount = 0;
+      const orderMap: Record<string, { items: Array<{ productName: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] as string[];
+        if (!row[dateIdx] || !row[productIdx]) continue;
+        const date = String(row[dateIdx] || '').trim();
+        const customerName = String(row[customerIdx] || '').trim();
+        const productName = String(row[productIdx] || '').trim();
+        const weight = Number(row[weightIdx]) || 0;
+        const unitPrice = Number(row[priceIdx]) || 0;
+        const freight = Number(row[freightIdx]) || 0;
+        const remark = String(row[remarkIdx] || '').trim();
+        if (!customerName) { errorCount++; continue; }
+        const key = `${date}-${customerName}`;
+        if (!orderMap[key]) orderMap[key] = { items: [], freight: 0, remark: '' };
+        orderMap[key].items.push({ productName, weight, unitPrice });
+        orderMap[key].freight = Math.max(orderMap[key].freight, freight);
+        orderMap[key].remark = remark || orderMap[key].remark;
+      }
+      for (const [key, data] of Object.entries(orderMap)) {
+        const [date, customerName] = key.split('-');
+        const customer = customers.find(c => c.name === customerName);
+        if (!customer) { errorCount += data.items.length; continue; }
+        const totalAmount = data.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + data.freight;
+        const res = await fetch(`/api/orderNo?prefix=CHD&date=${date}`);
+        const { orderNo } = await res.json();
+        const order = await dbSalesOrders.add({
+          orderNo, date, customerId: customer.id, customerName: customer.name,
+          totalAmount, freight: data.freight, collectedAmount: 0, uncollectedAmount: totalAmount,
+          paymentStatus: 'unpaid', remark: data.remark, createdBy: currentUser?.name || '',
+        });
+        await dbSalesOrderItems.addBatch(data.items.map(item => ({
+          orderId: order.id, productId: generateId(), productName: item.productName,
+          weight: item.weight, unitPrice: item.unitPrice, amount: item.weight * item.unitPrice,
+        })));
+        for (const item of data.items) {
+          const allInv = await dbInventory.getAll();
+          let inv = allInv.find(i => i.productName === item.productName);
+          if (!inv) {
+            inv = await dbInventory.add({
+              productName: item.productName, category: '成品', rawMaterialStock: 0,
+              finishedProductStock: 0, warningThreshold: 100, status: 'normal',
+            });
+          }
+          const newFinished = Math.max(0, inv.finishedProductStock - item.weight);
+          await dbInventory.put({ ...inv, finishedProductStock: newFinished });
+          await dbInventoryLogs.add({
+            inventoryId: inv.id, productName: item.productName, logType: '批量导入',
+            relatedOrderNo: orderNo, quantity: -item.weight, balance: newFinished,
+            remark: `批量导入出货单 ${orderNo}`, operator: currentUser?.name || '',
+          });
+        }
+        successCount += data.items.length;
+      }
+      await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '出货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
+      toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error('导入失败，请检查文件格式');
+    }
+    e.target.value = '';
+  };
+
   if (loading) return <LoadingSkeleton />;
 
   return (
@@ -148,6 +345,7 @@ export default function SystemManagement() {
           <TabsTrigger value="users" className="gap-1.5"><Users className="size-3.5" />用户管理</TabsTrigger>
           <TabsTrigger value="purchaseCats" className="gap-1.5"><ShoppingCart className="size-3.5" />进货分类</TabsTrigger>
           <TabsTrigger value="saleCats" className="gap-1.5"><Truck className="size-3.5" />出货分类</TabsTrigger>
+          <TabsTrigger value="import" className="gap-1.5"><Upload className="size-3.5" />批量导入</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><FileText className="size-3.5" />操作日志</TabsTrigger>
         </TabsList>
 
@@ -176,10 +374,7 @@ export default function SystemManagement() {
                   <TableCell>{u.name}</TableCell>
                   <TableCell><Badge variant="secondary" className="bg-gray-100">{USER_ROLES.find(r => r.value === u.role)?.label || u.role}</Badge></TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
-                      <span className={`text-xs ${u.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>{u.status === 'active' ? '启用' : '禁用'}</span>
-                    </div>
+                    <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(u.lastLoginAt || '')}</TableCell>
                   <TableCell className="text-right">
@@ -228,6 +423,49 @@ export default function SystemManagement() {
               ))}</TableBody>
             </Table></div>
           </CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="import" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="border-gray-200">
+              <CardHeader><h3 className="font-medium">进货订单批量导入</h3></CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">下载模板填写进货订单数据后上传导入。同一天同一供应商的订单将自动合并。</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={downloadPurchaseTemplate}><Download className="h-4 w-4 mr-1" />下载模板</Button>
+                  <label>
+                    <Button className="bg-black text-white hover:bg-gray-800 cursor-pointer" asChild>
+                      <span><Upload className="h-4 w-4 mr-1" />导入数据</span>
+                    </Button>
+                    <input type="file" accept=".xlsx,.xls" onChange={handleImportPurchase} className="hidden" />
+                  </label>
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>模板字段：订单日期、供应商名称、产品名称、规格、重量(KG)、单价(元)、运费(元)、备注</div>
+                  <div>注意：供应商名称必须与系统中已有的供应商名称完全一致</div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-gray-200">
+              <CardHeader><h3 className="font-medium">出货订单批量导入</h3></CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">下载模板填写出货订单数据后上传导入。同一天同一客户的订单将自动合并。</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={downloadSalesTemplate}><Download className="h-4 w-4 mr-1" />下载模板</Button>
+                  <label>
+                    <Button className="bg-black text-white hover:bg-gray-800 cursor-pointer" asChild>
+                      <span><Upload className="h-4 w-4 mr-1" />导入数据</span>
+                    </Button>
+                    <input type="file" accept=".xlsx,.xls" onChange={handleImportSales} className="hidden" />
+                  </label>
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>模板字段：订单日期、客户名称、产品名称、重量(KG)、单价(元)、运费(元)、备注</div>
+                  <div>注意：客户名称必须与系统中已有的客户名称完全一致</div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="logs" className="space-y-4">
