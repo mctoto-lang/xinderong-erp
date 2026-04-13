@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
-  && apk add --no-cache python3 make g++
+  && apk add --no-cache python3 make g++ sqlite sqlite-dev
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN npm run build
 FROM node:20-alpine AS runner
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
-  && apk add --no-cache python3 make g++
+  && apk add --no-cache sqlite sqlite-dev
 
 WORKDIR /app
 
@@ -30,7 +30,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-RUN mkdir -p /app/node_modules/better-sqlite3
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
 
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data

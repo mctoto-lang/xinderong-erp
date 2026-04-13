@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  xinderong-erp:
+    image: mctoto-lang/xinderong-erp:latest
+    container_name: xinderong-erp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - xinderong-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+
+volumes:
+  xinderong-data:
+    driver: local
