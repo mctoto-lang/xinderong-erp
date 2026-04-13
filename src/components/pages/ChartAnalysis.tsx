@@ -12,26 +12,20 @@ import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { format as dateFnsFormat, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear } from 'date-fns';
 import type { PurchaseOrder, SalesOrder, PurchaseOrderItem, SalesOrderItem } from '@/lib/types';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, ResponsiveContainer } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
   type ChartConfig,
 } from '@/components/ui/chart';
 
 const CHART_COLORS = [
-  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
-  'var(--chart-5)', 'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)',
+  '#93c5fd', '#6ee7b7', '#fcd34d', '#f9a8d4',
+  '#a5b4fc', '#5eead4', '#fdba74', '#bef264',
 ];
 
-const GRADIENT_COLORS = [
-  { start: '#93c5fd', end: '#c4b5fd' },
-  { start: '#6ee7b7', end: '#67e8f9' },
-  { start: '#fcd34d', end: '#fca5a5' },
-  { start: '#f9a8d4', end: '#c4b5fd' },
-  { start: '#a5b4fc', end: '#93c5fd' },
-  { start: '#5eead4', end: '#6ee7b7' },
-  { start: '#fdba74', end: '#fcd34d' },
-  { start: '#bef264', end: '#86efac' },
+const SOLID_COLORS = [
+  '#93c5fd', '#6ee7b7', '#fcd34d', '#f9a8d4',
+  '#a5b4fc', '#5eead4', '#fdba74', '#bef264',
 ];
 
 export default function ChartAnalysis() {
@@ -249,20 +243,12 @@ export default function ChartAnalysis() {
             <CardContent>{poSupplierProductData.length === 0 ? <EmptyState title="暂无数据" /> : (
               <ChartContainer config={poSupplierProductConfig} className="h-[300px] w-full">
                 <BarChart accessibilityLayer data={poSupplierProductData}>
-                  <defs>
-                    {poProductNamesArr.map((name, i) => (
-                      <linearGradient key={`grad-${name}`} id={`poProductGradient-${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={GRADIENT_COLORS[i % GRADIENT_COLORS.length].start} />
-                        <stop offset="100%" stopColor={GRADIENT_COLORS[i % GRADIENT_COLORS.length].end} />
-                      </linearGradient>
-                    ))}
-                  </defs>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="supplier" tickLine={false} tickMargin={10} axisLine={false} />
                   <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                   <ChartLegend content={<ChartLegendContent />} />
                   {poProductNamesArr.map((name, i) => (
-                    <Bar key={name} dataKey={name} stackId="a" fill={`url(#poProductGradient-${i})`} />
+                    <Bar key={name} dataKey={name} stackId="a" fill={SOLID_COLORS[i % SOLID_COLORS.length]} />
                   ))}
                 </BarChart>
               </ChartContainer>
@@ -273,17 +259,11 @@ export default function ChartAnalysis() {
             <CardContent>{poAvgPriceData.length === 0 ? <EmptyState title="暂无数据" /> : (
               <ChartContainer config={poAvgPriceConfig} className="h-[250px] w-full">
                 <BarChart accessibilityLayer data={poAvgPriceData} layout="vertical">
-                  <defs>
-                    <linearGradient id="avgPriceGradient" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#93c5fd" />
-                      <stop offset="100%" stopColor="#c4b5fd" />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid horizontal={false} />
                   <XAxis type="number" tickFormatter={v => `¥${v}`} />
                   <YAxis type="category" dataKey="name" width={80} tickLine={false} />
                   <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  <Bar dataKey="avgPrice" fill="url(#avgPriceGradient)" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="avgPrice" fill="#93c5fd" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
                 </BarChart>
               </ChartContainer>
             )}</CardContent>
@@ -295,20 +275,12 @@ export default function ChartAnalysis() {
             <CardContent>{soCustomerSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
               <ChartContainer config={soCustomerSpecConfig} className="h-[300px] w-full">
                 <BarChart accessibilityLayer data={soCustomerSpecData}>
-                  <defs>
-                    {soSpecNamesArr.map((name, i) => (
-                      <linearGradient key={`grad-${name}`} id={`soSpecGradient-${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={GRADIENT_COLORS[i % GRADIENT_COLORS.length].start} />
-                        <stop offset="100%" stopColor={GRADIENT_COLORS[i % GRADIENT_COLORS.length].end} />
-                      </linearGradient>
-                    ))}
-                  </defs>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="customer" tickLine={false} tickMargin={10} axisLine={false} />
                   <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                   <ChartLegend content={<ChartLegendContent />} />
                   {soSpecNamesArr.map((name, i) => (
-                    <Bar key={name} dataKey={name} stackId="a" fill={`url(#soSpecGradient-${i})`} />
+                    <Bar key={name} dataKey={name} stackId="a" fill={SOLID_COLORS[i % SOLID_COLORS.length]} />
                   ))}
                 </BarChart>
               </ChartContainer>
@@ -320,17 +292,11 @@ export default function ChartAnalysis() {
               <CardContent>{soAmountRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
                 <ChartContainer config={soAmountConfig} className="h-[250px] w-full">
                   <BarChart accessibilityLayer data={soAmountRankData} layout="vertical">
-                    <defs>
-                      <linearGradient id="amountGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#6ee7b7" />
-                        <stop offset="100%" stopColor="#67e8f9" />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid horizontal={false} />
                     <XAxis type="number" tickFormatter={v => `¥${(v / 1000).toFixed(0)}k`} />
                     <YAxis type="category" dataKey="name" width={80} tickLine={false} />
                     <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="amount" fill="url(#amountGradient)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="amount" fill="#6ee7b7" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>
@@ -340,17 +306,11 @@ export default function ChartAnalysis() {
               <CardContent>{soWeightRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
                 <ChartContainer config={soWeightConfig} className="h-[250px] w-full">
                   <BarChart accessibilityLayer data={soWeightRankData} layout="vertical">
-                    <defs>
-                      <linearGradient id="weightGradient" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#fcd34d" />
-                        <stop offset="100%" stopColor="#fca5a5" />
-                      </linearGradient>
-                    </defs>
                     <CartesianGrid horizontal={false} />
                     <XAxis type="number" tickFormatter={v => `${v}KG`} />
                     <YAxis type="category" dataKey="name" width={80} tickLine={false} />
                     <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="weight" fill="url(#weightGradient)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="weight" fill="#fcd34d" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>
