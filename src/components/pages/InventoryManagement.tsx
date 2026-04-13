@@ -19,13 +19,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Search, Eye, RotateCcw, Settings2 } from 'lucide-react';
-import { dbInventory, dbInventoryLogs } from '@/lib/api';
+import { Search, Eye, RotateCcw, Settings2, RefreshCw } from 'lucide-react';
+import { dbInventory, dbInventoryLogs, dbPurchaseOrders, dbPurchaseOrderItems, dbSalesOrders, dbSalesOrderItems, dbProductionOrders, dbProductionOrderItems } from '@/lib/api';
 import { formatWeight, formatDate, formatDateTime } from '@/lib/format';
 import { INVENTORY_LOG_TYPES } from '@/lib/constants';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { IconButton } from '@/components/shared/IconButton';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { toast } from 'sonner';
 import type { Inventory, InventoryLog } from '@/lib/types';
@@ -135,7 +136,7 @@ export default function InventoryManagement() {
   const viewLogs = async (item: Inventory) => {
     setSelectedProduct(item);
     const allLogs = await dbInventoryLogs.getAll();
-    setLogs(allLogs.filter(l => l.productName === item.productName).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    setLogs(allLogs.filter(l => l.productName === item.productName).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
     setLogTypeFilter('all');
     setShowLogSheet(true);
   };
@@ -163,6 +164,81 @@ export default function InventoryManagement() {
     toast.success('预警阈值已更新');
     setShowThresholdDialog(false);
     loadData();
+  };
+
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const resetInventory = async () => {
+    setResetting(true);
+    try {
+      const allInv = await dbInventory.getAll();
+      for (const inv of allInv) {
+        await dbInventory.put({ ...inv, rawMaterialStock: 0, finishedProductStock: 0 });
+      }
+      const allLogs = await dbInventoryLogs.getAll();
+      for (const log of allLogs) {
+        await dbInventoryLogs.remove(log.id);
+      }
+      const poItems = await dbPurchaseOrderItems.getAll();
+      const poMap: Record<string, number> = {};
+      for (const item of poItems) {
+        if (!item.productName) continue;
+        poMap[item.productName] = (poMap[item.productName] || 0) + (item.weight || 0);
+      }
+      const soItems = await dbSalesOrderItems.getAll();
+      const soMap: Record<string, number> = {};
+      for (const item of soItems) {
+        if (!item.productName) continue;
+        soMap[item.productName] = (soMap[item.productName] || 0) + (item.weight || 0);
+      }
+      const prodItems = await dbProductionOrderItems.getAll();
+      const prodInputMap: Record<string, number> = {};
+      const prodOutputMap: Record<string, number> = {};
+      for (const item of prodItems) {
+        if (item.inputWeight && item.productName) {
+          prodInputMap[item.productName] = (prodInputMap[item.productName] || 0) + item.inputWeight;
+        }
+        if (item.outputWeight && item.productName) {
+          prodOutputMap[item.productName] = (prodOutputMap[item.productName] || 0) + item.outputWeight;
+        }
+      }
+      const allProductNames = new Set([
+        ...Object.keys(poMap),
+        ...Object.keys(soMap),
+        ...Object.keys(prodInputMap),
+        ...Object.keys(prodOutputMap),
+      ]);
+      for (const productName of allProductNames) {
+        if (!productName) continue;
+        let inv = allInv.find(i => i.productName === productName);
+        if (!inv) {
+          inv = await dbInventory.add({
+            productName,
+            category: soMap[productName] ? '成品' : '原料',
+            rawMaterialStock: 0,
+            finishedProductStock: 0,
+            warningThreshold: 100,
+            status: 'normal',
+          });
+        }
+        const rawFromPO = poMap[productName] || 0;
+        const rawUsedInProd = prodInputMap[productName] || 0;
+        const newRaw = Math.max(0, rawFromPO - rawUsedInProd);
+        const finishedFromProd = prodOutputMap[productName] || 0;
+        const finishedSold = soMap[productName] || 0;
+        const newFinished = Math.max(0, finishedFromProd - finishedSold);
+        await dbInventory.put({ ...inv, rawMaterialStock: newRaw, finishedProductStock: newFinished });
+      }
+      toast.success('库存已重置并重新计算');
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error('重置失败');
+    } finally {
+      setResetting(false);
+      setShowResetConfirm(false);
+    }
   };
 
   const filteredLogs = logs.filter(l => logTypeFilter === 'all' || l.logType === logTypeFilter);
@@ -199,7 +275,8 @@ export default function InventoryManagement() {
               </Button>
             ))}
           </div>
-          <Button variant="outline" size="sm" onClick={() => { setSearchTerm(''); setTabFilter('all'); loadData(); }}><RotateCcw className="h-4 w-4 mr-1" />重置</Button>
+          <Button variant="outline" size="sm" onClick={() => { setSearchTerm(''); setTabFilter('all'); loadData(); }}><RotateCcw className="h-4 w-4 mr-1" />重置筛选</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowResetConfirm(true)} className="text-red-600 hover:text-red-700 hover:bg-red-50"><RefreshCw className="h-4 w-4 mr-1" />重置库存</Button>
         </div>
       </div>
 
@@ -358,7 +435,7 @@ export default function InventoryManagement() {
                 <div key={log.id} className="rounded-lg border bg-card/50 px-4 py-3 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">{log.logType}</span>
-                    <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt || '')}</span>
                   </div>
                   <div className="text-sm">{log.remark}</div>
                   <div className="flex items-center justify-between text-xs">
@@ -373,6 +450,15 @@ export default function InventoryManagement() {
           </>
         )}
       </DetailSheet>
+
+      <ConfirmDialog
+        open={showResetConfirm}
+        onOpenChange={setShowResetConfirm}
+        title="重置库存"
+        description="确定要重置库存吗？此操作将清除所有库存记录和历史日志，并根据进货、出货、生产订单重新计算库存。此操作不可撤销！"
+        onConfirm={resetInventory}
+        confirmText={resetting ? '重置中...' : '确认重置'}
+      />
     </div>
   );
 }

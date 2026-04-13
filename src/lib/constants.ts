@@ -1,7 +1,7 @@
 // ERP Constants
 
-export const COMPANY_NAME = '衡阳鑫德荣新材料';
-export const COMPANY_SUBTITLE = '科技有限公司';
+export const COMPANY_NAME = '衡阳鑫德荣新材料科技有限公司';
+export const COMPANY_SUBTITLE = '生产销售管理一体化平台';
 export const SYSTEM_NAME = 'ERP管理系统';
 export const DB_NAME = 'erp-xdr-2024';
 export const DB_VERSION = 2;
