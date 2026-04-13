@@ -4,24 +4,21 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { BarChart3, X } from 'lucide-react';
-import { dbPurchaseOrders, dbSalesOrders, dbPurchaseOrderItems, dbSalesOrderItems, dbSuppliers, dbCustomers } from '@/lib/api';
+import { X } from 'lucide-react';
+import { dbPurchaseOrders, dbSalesOrders, dbPurchaseOrderItems, dbSalesOrderItems } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
-import { format as dateFnsFormat } from 'date-fns';
+import { format as dateFnsFormat, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear } from 'date-fns';
 import type { PurchaseOrder, SalesOrder, PurchaseOrderItem, SalesOrderItem } from '@/lib/types';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
 
-const COLORS = ['#000000', '#374151', '#6b7280', '#9ca3af', '#d1d5db', '#e5e7eb', '#4b5563', '#1f2937'];
-const BAR_COLORS = ['#000000', '#374151', '#6b7280', '#9ca3af', '#4b5563', '#1f2937', '#d1d5db', '#e5e7eb'];
+const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+const BAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
 export default function ChartAnalysis() {
   const [loading, setLoading] = useState(true);
@@ -29,25 +26,20 @@ export default function ChartAnalysis() {
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [purchaseItems, setPurchaseItems] = useState<PurchaseOrderItem[]>([]);
   const [salesItems, setSalesItems] = useState<SalesOrderItem[]>([]);
-  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
   const initialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
     try {
-      const [po, so, pi, si, sup, cust] = await Promise.all([
+      const [po, so, pi, si] = await Promise.all([
         dbPurchaseOrders.getAll(), dbSalesOrders.getAll(),
         dbPurchaseOrderItems.getAll(), dbSalesOrderItems.getAll(),
-        dbSuppliers.getAll(), dbCustomers.getAll(),
       ]);
       setPurchaseOrders(po);
       setSalesOrders(so);
       setPurchaseItems(pi);
       setSalesItems(si);
-      setSuppliers(sup.map(s => ({ id: s.id, name: s.name })));
-      setCustomers(cust.map(c => ({ id: c.id, name: c.name })));
     } finally {
       if (initialLoadRef.current) {
         setLoading(false);
@@ -62,13 +54,32 @@ export default function ChartAnalysis() {
     return () => clearInterval(timer);
   }, [loadData]);
 
+  const setQuickRange = (type: 'week' | 'month' | 'year') => {
+    const now = new Date();
+    if (type === 'week') {
+      setDateFrom(startOfWeek(now, { weekStartsOn: 1 }));
+      setDateTo(endOfWeek(now, { weekStartsOn: 1 }));
+    } else if (type === 'month') {
+      setDateFrom(startOfMonth(now));
+      setDateTo(endOfMonth(now));
+    } else {
+      setDateFrom(startOfYear(now));
+      setDateTo(endOfYear(now));
+    }
+  };
+
+  const clearRange = () => {
+    setDateFrom(undefined);
+    setDateTo(undefined);
+  };
+
   const dateFromStr = dateFrom ? dateFnsFormat(dateFrom, 'yyyy-MM-dd') : '';
   const dateToStr = dateTo ? dateFnsFormat(dateTo, 'yyyy-MM-dd') : '';
 
   // ============ PURCHASE CHARTS ============
   const poFiltered = purchaseOrders.filter(o => (!dateFromStr || o.date >= dateFromStr) && (!dateToStr || o.date <= dateToStr));
 
-  // 1. 进货规格占比 (by spec from purchase items)
+  // 1. 进货规格占比
   const poSpecMap: Record<string, number> = {};
   poFiltered.forEach(o => {
     const items = purchaseItems.filter(i => i.orderId === o.id);
@@ -79,14 +90,14 @@ export default function ChartAnalysis() {
   });
   const poSpecData = Object.entries(poSpecMap).map(([name, weight]) => ({ name, weight })).sort((a, b) => b.weight - a.weight);
 
-  // 2. 进货不同供应商占比 (pie chart)
+  // 2. 进货供应商占比
   const poSupplierMap: Record<string, number> = {};
   poFiltered.forEach(o => {
     poSupplierMap[o.supplierName || '未知'] = (poSupplierMap[o.supplierName || '未知'] || 0) + o.totalAmount;
   });
   const poSupplierPieData = Object.entries(poSupplierMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
-  // 3. 不同供应商在不同名称产品的供应量 (grouped bar chart)
+  // 3. 不同供应商供应不同产品量
   const poSupplierProductMap: Record<string, Record<string, number>> = {};
   const poProductNames = new Set<string>();
   poFiltered.forEach(o => {
@@ -97,13 +108,10 @@ export default function ChartAnalysis() {
       poProductNames.add(item.productName);
     });
   });
-  const poSupplierProductData = Object.entries(poSupplierProductMap).map(([supplier, products]) => ({
-    supplier,
-    ...products,
-  }));
+  const poSupplierProductData = Object.entries(poSupplierProductMap).map(([supplier, products]) => ({ supplier, ...products }));
   const poProductNamesArr = Array.from(poProductNames);
 
-  // 4. 进货均价 (by product, average unit price)
+  // 4. 进货均价
   const poPriceMap: Record<string, { totalAmount: number; totalWeight: number }> = {};
   poFiltered.forEach(o => {
     const items = purchaseItems.filter(i => i.orderId === o.id);
@@ -121,7 +129,7 @@ export default function ChartAnalysis() {
   // ============ SALES CHARTS ============
   const soFiltered = salesOrders.filter(o => (!dateFromStr || o.date >= dateFromStr) && (!dateToStr || o.date <= dateToStr));
 
-  // 1. 对不同客户出不同规格产品 (grouped bar chart)
+  // 1. 不同客户出货规格分布
   const soCustomerSpecMap: Record<string, Record<string, number>> = {};
   const soSpecNames = new Set<string>();
   soFiltered.forEach(o => {
@@ -132,10 +140,7 @@ export default function ChartAnalysis() {
       soSpecNames.add(item.productName);
     });
   });
-  const soCustomerSpecData = Object.entries(soCustomerSpecMap).map(([customer, specs]) => ({
-    customer,
-    ...specs,
-  }));
+  const soCustomerSpecData = Object.entries(soCustomerSpecMap).map(([customer, specs]) => ({ customer, ...specs }));
   const soSpecNamesArr = Array.from(soSpecNames);
 
   // 2. 货品出货金额排行
@@ -164,7 +169,7 @@ export default function ChartAnalysis() {
     <div className="p-4 space-y-3">
       <div><h2 className="text-lg font-semibold">图表分析</h2><p className="text-sm text-muted-foreground">通过图表分析采购和出货业务数据</p></div>
 
-      <Card className="border-gray-200"><CardContent className="py-3">
+      <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
         <div className="flex flex-wrap items-center gap-3">
           <DateRangePicker
             from={dateFrom}
@@ -172,115 +177,150 @@ export default function ChartAnalysis() {
             onSelect={({ from: f, to: t }) => { setDateFrom(f); setDateTo(t); }}
             placeholder="日期筛选"
           />
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" onClick={() => setQuickRange('week')} className="h-8 px-3 text-xs">本周</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickRange('month')} className="h-8 px-3 text-xs">本月</Button>
+            <Button variant="outline" size="sm" onClick={() => setQuickRange('year')} className="h-8 px-3 text-xs">本年</Button>
+          </div>
           {(dateFrom || dateTo) && (
-            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }} className="h-8 px-2">
+            <Button variant="ghost" size="sm" onClick={clearRange} className="h-8 px-2">
               <X className="h-3.5 w-3.5 mr-1" />清除
             </Button>
           )}
         </div>
-      </CardContent></Card>
+      </div>
 
       <Tabs defaultValue="purchase">
         <TabsList className="bg-gray-100"><TabsTrigger value="purchase">进货图表</TabsTrigger><TabsTrigger value="sales">出货图表</TabsTrigger></TabsList>
 
-        <TabsContent value="purchase" className="space-y-4">
-          {/* Row 1: Spec pie + Supplier pie */}
+        <TabsContent value="purchase" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">进货规格占比</CardTitle></CardHeader><CardContent>
-              {poSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <PieChart width={400} height={300}>
-                  <Pie data={poSpecData} cx="50%" cy="50%" outerRadius={100} dataKey="weight" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
-                    {poSpecData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => `${v.toFixed(1)}KG`} />
-                </PieChart>
-              )}
-            </CardContent></Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">进货规格占比</CardTitle></CardHeader>
+              <CardContent>
+                {poSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={poSpecData} cx="50%" cy="50%" outerRadius={90} dataKey="weight" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
+                        {poSpecData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => `${v.toFixed(1)}KG`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
 
-            <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">进货供应商占比</CardTitle></CardHeader><CardContent>
-              {poSupplierPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <PieChart width={400} height={300}>
-                  <Pie data={poSupplierPieData} cx="50%" cy="50%" outerRadius={100} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
-                    {poSupplierPieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
-                </PieChart>
-              )}
-            </CardContent></Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">进货供应商占比</CardTitle></CardHeader>
+              <CardContent>
+                {poSupplierPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={poSupplierPieData} cx="50%" cy="50%" outerRadius={90} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
+                        {poSupplierPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => formatMoney(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Row 2: Supplier-Product grouped bar */}
-          <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">不同供应商供应不同产品量</CardTitle></CardHeader><CardContent>
-            {poSupplierProductData.length === 0 ? <EmptyState title="暂无数据" /> : (
-              <BarChart data={poSupplierProductData} width={600} height={Math.max(300, poSupplierProductData.length * 50)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="supplier" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={v => `${v}KG`} />
-                <Tooltip />
-                <Legend />
-                {poProductNamesArr.map((name, i) => (
-                  <Bar key={name} dataKey={name} fill={BAR_COLORS[i % BAR_COLORS.length]} stackId="a" />
-                ))}
-              </BarChart>
-            )}
-          </CardContent></Card>
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">不同供应商供应不同产品量</CardTitle></CardHeader>
+            <CardContent>
+              {poSupplierProductData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                <ResponsiveContainer width="100%" height={Math.max(280, poSupplierProductData.length * 45)}>
+                  <BarChart data={poSupplierProductData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="supplier" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <YAxis tickFormatter={v => `${v}KG`} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                    <Legend />
+                    {poProductNamesArr.map((name, i) => (
+                      <Bar key={name} dataKey={name} fill={BAR_COLORS[i % BAR_COLORS.length]} stackId="a" radius={[0, 0, 0, 0]} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Row 3: Average price */}
-          <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">进货均价 (元/KG)</CardTitle></CardHeader><CardContent>
-            {poAvgPriceData.length === 0 ? <EmptyState title="暂无数据" /> : (
-              <BarChart data={poAvgPriceData} layout="vertical" height={Math.max(200, poAvgPriceData.length * 40)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={v => `¥${v}`} />
-                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => `¥${v}/KG`} />
-                <Bar dataKey="avgPrice" fill="#000" name="均价" />
-              </BarChart>
-            )}
-          </CardContent></Card>
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">进货均价 (元/KG)</CardTitle></CardHeader>
+            <CardContent>
+              {poAvgPriceData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                <ResponsiveContainer width="100%" height={Math.max(200, poAvgPriceData.length * 35)}>
+                  <BarChart data={poAvgPriceData} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis type="number" tickFormatter={v => `¥${v}`} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <Tooltip formatter={(v: number) => `¥${v}/KG`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                    <Bar dataKey="avgPrice" fill="#3b82f6" name="均价" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="sales" className="space-y-4">
-          {/* Row 1: Customer-Spec grouped bar */}
-          <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">不同客户出货规格分布</CardTitle></CardHeader><CardContent>
-            {soCustomerSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
-              <BarChart data={soCustomerSpecData} width={600} height={Math.max(300, soCustomerSpecData.length * 50)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="customer" tick={{ fontSize: 12 }} />
-                <YAxis tickFormatter={v => `${v}KG`} />
-                <Tooltip />
-                <Legend />
-                {soSpecNamesArr.map((name, i) => (
-                  <Bar key={name} dataKey={name} fill={BAR_COLORS[i % BAR_COLORS.length]} stackId="a" />
-                ))}
-              </BarChart>
-            )}
-          </CardContent></Card>
+        <TabsContent value="sales" className="space-y-4 mt-4">
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">不同客户出货规格分布</CardTitle></CardHeader>
+            <CardContent>
+              {soCustomerSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                <ResponsiveContainer width="100%" height={Math.max(280, soCustomerSpecData.length * 45)}>
+                  <BarChart data={soCustomerSpecData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="customer" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <YAxis tickFormatter={v => `${v}KG`} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                    <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                    <Legend />
+                    {soSpecNamesArr.map((name, i) => (
+                      <Bar key={name} dataKey={name} fill={BAR_COLORS[i % BAR_COLORS.length]} stackId="a" />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Row 2: Amount rank + Weight rank */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">货品出货金额排行</CardTitle></CardHeader><CardContent>
-              {soAmountRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <BarChart data={soAmountRankData} layout="vertical" height={Math.max(200, soAmountRankData.length * 40)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={v => `¥${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
-                  <Bar dataKey="amount" fill="#000" name="出货金额" />
-                </BarChart>
-              )}
-            </CardContent></Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">货品出货金额排行</CardTitle></CardHeader>
+              <CardContent>
+                {soAmountRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <ResponsiveContainer width="100%" height={Math.max(200, soAmountRankData.length * 35)}>
+                    <BarChart data={soAmountRankData} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis type="number" tickFormatter={v => `¥${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <Tooltip formatter={(v: number) => formatMoney(v)} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="amount" fill="#10b981" name="出货金额" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
 
-            <Card className="border-gray-200"><CardHeader><CardTitle className="text-sm">货品出货重量排行</CardTitle></CardHeader><CardContent>
-              {soWeightRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <BarChart data={soWeightRankData} layout="vertical" height={Math.max(200, soWeightRankData.length * 40)}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={v => `${v}KG`} />
-                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v: number) => `${v.toFixed(1)}KG`} />
-                  <Bar dataKey="weight" fill="#374151" name="出货重量" />
-                </BarChart>
-              )}
-            </CardContent></Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">货品出货重量排行</CardTitle></CardHeader>
+              <CardContent>
+                {soWeightRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <ResponsiveContainer width="100%" height={Math.max(200, soWeightRankData.length * 35)}>
+                    <BarChart data={soWeightRankData} layout="vertical" margin={{ top: 10, right: 30, left: 80, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis type="number" tickFormatter={v => `${v}KG`} tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} stroke="#6b7280" />
+                      <Tooltip formatter={(v: number) => `${v.toFixed(1)}KG`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="weight" fill="#f59e0b" name="出货重量" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
