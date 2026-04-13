@@ -1,19 +1,22 @@
 FROM node:20-alpine AS builder
 
-RUN apk add --no-cache python3 make g++
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+  && apk add --no-cache python3 make g++
 
 WORKDIR /app
 
 COPY package.json ./
 
-RUN npm install --legacy-peer-deps
+RUN npm config set registry https://registry.npmmirror.com \
+  && npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
 
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache python3
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+  && apk add --no-cache python3
 
 WORKDIR /app
 
