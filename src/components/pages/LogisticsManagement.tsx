@@ -21,18 +21,22 @@ import {
   PaginationPrevious, PaginationNext, PaginationEllipsis,
 } from '@/components/ui/pagination';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, FileDown, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, FileDown, Eye, Pencil, Trash2, CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { dbLogisticsRecords, dbAuditLogs } from '@/lib/api';
+import { dbLogisticsRecords, dbAuditLogs, dbPurchaseOrders, dbSalesOrders } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { formatMoney, formatDate, getTodayStr } from '@/lib/format';
+import { format as dateFnsFormat, parse as dateFnsParse } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { LOGISTICS_STATUSES } from '@/lib/constants';
 import { IconButton } from '@/components/shared/IconButton';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import type { LogisticsRecord } from '@/lib/types';
+import type { LogisticsRecord, PurchaseOrder, SalesOrder } from '@/lib/types';
 
 export default function LogisticsManagement() {
   const { currentUser } = useAppStore();
@@ -50,11 +54,24 @@ export default function LogisticsManagement() {
   const [selected, setSelected] = useState<LogisticsRecord | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+
   const [form, setForm] = useState({ type: 'purchase' as const, relatedOrderNo: '', plateNumber: '', driver: '', freight: 0, date: getTodayStr(), fromAddress: '', toAddress: '', status: 'pending' as const, remark: '' });
 
   const initialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
-    try { const list = await dbLogisticsRecords.getAll(); list.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); setRecords(list); } finally {
+    try {
+      const [list, po, so] = await Promise.all([
+        dbLogisticsRecords.getAll(),
+        dbPurchaseOrders.getAll(),
+        dbSalesOrders.getAll(),
+      ]);
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setRecords(list);
+      setPurchaseOrders(po);
+      setSalesOrders(so);
+    } finally {
       if (initialLoadRef.current) {
         setLoading(false);
         initialLoadRef.current = false;
@@ -217,8 +234,18 @@ export default function LogisticsManagement() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>{editing ? '编辑' : '新增'}物流记录</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>类型</Label><Select value={form.type} onValueChange={v => setForm({ ...form, type: v as 'purchase' | 'sale' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="purchase">采购</SelectItem><SelectItem value="sale">出货</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label>关联单据 *</Label><Input value={form.relatedOrderNo} onChange={e => setForm({ ...form, relatedOrderNo: e.target.value })} /></div>
+            <div className="space-y-2"><Label>类型</Label><Select value={form.type} onValueChange={v => setForm({ ...form, type: v as 'purchase' | 'sale', relatedOrderNo: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="purchase">采购</SelectItem><SelectItem value="sale">出货</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>关联单据 *</Label>
+              <Select value={form.relatedOrderNo} onValueChange={v => setForm({ ...form, relatedOrderNo: v })}>
+                <SelectTrigger><SelectValue placeholder={form.type === 'purchase' ? '选择进货单' : '选择出货单'} /></SelectTrigger>
+                <SelectContent>
+                  {form.type === 'purchase'
+                    ? purchaseOrders.map(o => <SelectItem key={o.id} value={o.orderNo}>{o.orderNo} - {o.supplierName}</SelectItem>)
+                    : salesOrders.map(o => <SelectItem key={o.id} value={o.orderNo}>{o.orderNo} - {o.customerName}</SelectItem>)
+                  }
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>车牌号</Label><Input value={form.plateNumber} onChange={e => setForm({ ...form, plateNumber: e.target.value })} /></div>
@@ -226,7 +253,19 @@ export default function LogisticsManagement() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>运费 (¥)</Label><Input type="number" value={form.freight || ''} onChange={e => setForm({ ...form, freight: Number(e.target.value) || 0 })} /></div>
-            <div className="space-y-2"><Label>运输日期</Label><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
+            <div className="space-y-2"><Label>运输日期</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={`w-full justify-start text-left font-normal gap-2 h-9 ${!form.date ? 'text-muted-foreground' : ''}`}>
+                    <CalendarIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{form.date ? dateFnsFormat(dateFnsParse(form.date, 'yyyy-MM-dd', new Date()), 'yyyy年MM月dd日', { locale: zhCN }) : '选择日期'}</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={form.date ? dateFnsParse(form.date, 'yyyy-MM-dd', new Date()) : undefined} onSelect={(d) => setForm({ ...form, date: d ? dateFnsFormat(d, 'yyyy-MM-dd') : '' })} defaultMonth={form.date ? dateFnsParse(form.date, 'yyyy-MM-dd', new Date()) : new Date()} locale={zhCN} />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>发地址</Label><Input value={form.fromAddress} onChange={e => setForm({ ...form, fromAddress: e.target.value })} /></div>

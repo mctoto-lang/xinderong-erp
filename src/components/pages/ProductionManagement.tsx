@@ -19,8 +19,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Search, FileDown, Eye, Trash2, Play, CheckCircle2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, FileDown, Eye, Trash2, Play, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { format as dateFnsFormat, parse as dateFnsParse } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { dbProductionOrders, dbProductionOrderItems, dbPurchaseOrderItems, dbInventory, dbInventoryLogs, dbAuditLogs } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { formatMoney, formatDate, formatWeight, formatYieldRate, getTodayStr } from '@/lib/format';
@@ -499,7 +503,19 @@ export default function ProductionManagement() {
           <DialogHeader><DialogTitle>新建生产单</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>加工日期</Label><Input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} /></div>
+              <div className="space-y-2"><Label>加工日期</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={`w-full justify-start text-left font-normal gap-2 h-9 ${!formDate ? 'text-muted-foreground' : ''}`}>
+                      <CalendarIcon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{formDate ? dateFnsFormat(dateFnsParse(formDate, 'yyyy-MM-dd', new Date()), 'yyyy年MM月dd日', { locale: zhCN }) : '选择日期'}</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={formDate ? dateFnsParse(formDate, 'yyyy-MM-dd', new Date()) : undefined} onSelect={(d) => setFormDate(d ? dateFnsFormat(d, 'yyyy-MM-dd') : '')} defaultMonth={formDate ? dateFnsParse(formDate, 'yyyy-MM-dd', new Date()) : new Date()} locale={zhCN} />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="space-y-2"><Label>备注</Label><Input value={formRemark} onChange={e => setFormRemark(e.target.value)} /></div>
             </div>
 
