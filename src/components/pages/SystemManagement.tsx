@@ -145,6 +145,12 @@ export default function SystemManagement() {
 
   const parseExcelDate = (value: unknown): string => {
     if (!value) return '';
+    if (value instanceof Date) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
     if (typeof value === 'number') {
       const date = XLSX.SSF.parse_date_code(value);
       if (date) {
@@ -154,12 +160,12 @@ export default function SystemManagement() {
       }
     }
     const str = String(value).trim();
-    const match = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+    const match = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
     if (match) {
       const [, y, m, d] = match;
       return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
     }
-    return str;
+    return '';
   };
 
   const downloadPurchaseTemplate = () => {
@@ -393,10 +399,7 @@ export default function SystemManagement() {
                   <TableCell>{u.name}</TableCell>
                   <TableCell><Badge variant="secondary" className="bg-gray-100">{USER_ROLES.find(r => r.value === u.role)?.label || u.role}</Badge></TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
-                      <span className={`text-xs ${u.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>{u.status === 'active' ? '启用' : '禁用'}</span>
-                    </div>
+                    <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(u.lastLoginAt || '')}</TableCell>
                   <TableCell className="text-right">
