@@ -108,7 +108,7 @@ export default function ProductionManagement() {
         dbProductionOrders.getAll(),
         loadMaterials(),
       ]);
-      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setOrders(list);
 
       const allProductionItems = await dbProductionOrderItems.getAll();

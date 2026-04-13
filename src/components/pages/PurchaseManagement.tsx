@@ -155,7 +155,7 @@ export default function PurchaseManagement() {
         dbSystemSettings.getByKey('companyAddress'),
         dbSystemSettings.getByKey('companyPhone'),
       ]);
-      orderList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      orderList.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       categoryList.sort((a, b) => a.sort - b.sort);
       setOrders(orderList);
       setSuppliers(supplierList);

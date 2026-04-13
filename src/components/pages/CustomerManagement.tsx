@@ -49,7 +49,7 @@ export default function CustomerManagement() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const [form, setForm] = useState({ name: '', contactPerson: '', phone: '', address: '', level: 'C' as const, creditLimit: 0, remark: '' });
+  const [form, setForm] = useState<{ name: string; contactPerson: string; phone: string; address: string; level: Customer['level']; creditLimit: number; remark: string }>({ name: '', contactPerson: '', phone: '', address: '', level: 'C', creditLimit: 0, remark: '' });
   const [recentOrders, setRecentOrders] = useState<SalesOrder[]>([]);
 
   const initialLoadRef = useRef(true);
@@ -282,7 +282,7 @@ export default function CustomerManagement() {
             <InfoRow label="联系人" value={selected.contactPerson || '-'} />
             <InfoRow label="电话" value={selected.phone || '-'} />
             <InfoRow label="地址" value={selected.address || '-'} />
-            <InfoRow label="创建时间" value={formatDate(selected.createdAt)} />
+            <InfoRow label="创建时间" value={formatDate(selected.createdAt || '')} />
             {selected.remark && <InfoRow label="备注" value={selected.remark} />}
           </InfoSection>
 
