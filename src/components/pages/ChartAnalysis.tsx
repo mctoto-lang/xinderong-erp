@@ -220,9 +220,9 @@ export default function ChartAnalysis() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">进货规格占比</CardTitle><CardDescription className="text-xs">按规格重量统计</CardDescription></CardHeader>
               <CardContent>{poSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <ChartContainer config={poSpecConfig} className="mx-auto aspect-square max-h-[300px] [&_.recharts-pie-label-text]:fill-foreground">
-                  <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}><ChartTooltip content={<ChartTooltipContent nameKey="weight" hideLabel />} />
-                    <Pie data={poSpecData} dataKey="weight" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
+                <ChartContainer config={poSpecConfig} className="mx-auto aspect-square max-h-[320px] [&_.recharts-pie-label-text]:fill-foreground">
+                  <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}><ChartTooltip content={<ChartTooltipContent nameKey="weight" hideLabel />} />
+                    <Pie data={poSpecData} dataKey="weight" nameKey="name" innerRadius={50} outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
                   </PieChart>
                 </ChartContainer>
               )}</CardContent>
@@ -230,9 +230,9 @@ export default function ChartAnalysis() {
 
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">进货供应商占比</CardTitle><CardDescription className="text-xs">按供应商金额统计</CardDescription></CardHeader>
               <CardContent>{poSupplierPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <ChartContainer config={poSupplierConfig} className="mx-auto aspect-square max-h-[300px] [&_.recharts-pie-label-text]:fill-foreground">
-                  <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}><ChartTooltip content={<ChartTooltipContent nameKey="value" hideLabel />} />
-                    <Pie data={poSupplierPieData} dataKey="value" nameKey="name" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
+                <ChartContainer config={poSupplierConfig} className="mx-auto aspect-square max-h-[320px] [&_.recharts-pie-label-text]:fill-foreground">
+                  <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}><ChartTooltip content={<ChartTooltipContent nameKey="value" hideLabel />} />
+                    <Pie data={poSupplierPieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
                   </PieChart>
                 </ChartContainer>
               )}</CardContent>

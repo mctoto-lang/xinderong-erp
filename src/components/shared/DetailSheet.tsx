@@ -105,36 +105,34 @@ interface DetailTableProps {
 
 export function DetailTable({ columns, data }: DetailTableProps) {
   return (
-    <div className="rounded-lg border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b bg-muted/50">
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b bg-muted/50">
+          {columns.map(col => (
+            <th
+              key={col.key}
+              className={`px-3 py-2 text-xs font-medium text-muted-foreground ${col.align === 'right' ? 'text-right' : 'text-left'} ${col.width || ''} ${col.className || ''}`}
+            >
+              {col.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((row, idx) => (
+          <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
             {columns.map(col => (
-              <th
+              <td
                 key={col.key}
-                className={`px-3 py-2 text-xs font-medium text-muted-foreground ${col.align === 'right' ? 'text-right' : 'text-left'} ${col.width || ''} ${col.className || ''}`}
+                className={`px-3 py-2.5 ${col.align === 'right' ? 'text-right font-mono text-xs' : 'text-sm'} ${col.className || ''}`}
               >
-                {col.label}
-              </th>
+                {row[col.key]}
+              </td>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {data.map((row, idx) => (
-            <tr key={idx} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-              {columns.map(col => (
-                <td
-                  key={col.key}
-                  className={`px-3 py-2.5 ${col.align === 'right' ? 'text-right font-mono text-xs' : 'text-sm'} ${col.className || ''}`}
-                >
-                  {row[col.key]}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
