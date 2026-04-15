@@ -145,12 +145,6 @@ export default function SystemManagement() {
 
   const parseExcelDate = (value: unknown): string => {
     if (!value) return '';
-    if (value instanceof Date) {
-      const y = value.getFullYear();
-      const m = String(value.getMonth() + 1).padStart(2, '0');
-      const d = String(value.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
     if (typeof value === 'number') {
       const date = XLSX.SSF.parse_date_code(value);
       if (date) {
@@ -158,6 +152,12 @@ export default function SystemManagement() {
         const d = String(date.d).padStart(2, '0');
         return `${date.y}-${m}-${d}`;
       }
+    }
+    if (value instanceof Date) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
     const str = String(value).trim();
     const match = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
@@ -191,9 +191,9 @@ export default function SystemManagement() {
     if (!file) return;
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { cellDates: true });
+      const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as unknown[][];
       if (rows.length < 2) { toast.error('文件为空或格式错误'); return; }
       const headers = rows[0] as string[];
       const dateIdx = headers.findIndex(h => h?.includes('日期'));
@@ -278,9 +278,9 @@ export default function SystemManagement() {
     if (!file) return;
     try {
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { cellDates: true });
+      const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as unknown[][];
       if (rows.length < 2) { toast.error('文件为空或格式错误'); return; }
       const headers = rows[0] as string[];
       const dateIdx = headers.findIndex(h => h?.includes('日期'));

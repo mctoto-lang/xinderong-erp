@@ -82,11 +82,11 @@ export default function FinanceManagement() {
   const allTransactions = [
     ...payments.map(p => {
       const po = purchaseOrders.find(o => o.id === p.orderId);
-      return { date: p.date, type: '付款' as const, orderNo: po?.orderNo || p.orderId, target: po?.supplierName || '', amount: -p.amount, method: p.method, remark: p.remark };
+      return { date: p.date, type: '付款' as const, orderNo: po?.orderNo || p.orderId, target: po?.supplierName || p.remark || '', amount: -p.amount, method: p.method, remark: p.remark };
     }),
     ...collections.map(c => {
       const so = salesOrders.find(o => o.id === c.orderId);
-      return { date: c.date, type: '回款' as const, orderNo: so?.orderNo || c.orderId, target: so?.customerName || '', amount: c.amount, method: c.method, remark: c.remark };
+      return { date: c.date, type: '回款' as const, orderNo: so?.orderNo || c.orderId, target: so?.customerName || c.remark || '', amount: c.amount, method: c.method, remark: c.remark };
     }),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
