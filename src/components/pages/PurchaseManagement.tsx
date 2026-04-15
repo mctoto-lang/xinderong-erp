@@ -462,10 +462,10 @@ export default function PurchaseManagement() {
       o.orderNo,
       o.date,
       o.supplierName,
-      o.totalAmount,
-      o.freight,
-      o.paidAmount,
-      o.unpaidAmount,
+      o.totalAmount.toFixed(2),
+      o.freight.toFixed(2),
+      o.paidAmount.toFixed(2),
+      o.unpaidAmount.toFixed(2),
       PAYMENT_STATUSES.find(s => s.value === o.paymentStatus)?.label || o.paymentStatus,
     ]);
     const csvContent = '\uFEFF' + [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -570,7 +570,7 @@ export default function PurchaseManagement() {
                       <TableCell className="text-right font-mono">{formatMoney(order.totalAmount)}</TableCell>
                       <TableCell className="py-1">
                         <div className="flex items-center gap-2 w-[120px]">
-                          <Progress value={progress} className="h-2 flex-1 [&>div]:bg-black" />
+                          <Progress value={progress} className={`h-2 flex-1 [&>div]:${progress >= 100 ? 'bg-green-500' : progress > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
                           <span className="text-[11px] text-muted-foreground tabular-nums w-8 text-right shrink-0">{Math.round(progress)}%</span>
                         </div>
                       </TableCell>

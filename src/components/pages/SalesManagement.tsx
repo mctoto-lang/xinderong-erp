@@ -362,9 +362,9 @@ export default function SalesManagement() {
       o.orderNo,
       o.date,
       o.customerName,
-      o.totalAmount,
-      o.collectedAmount,
-      o.uncollectedAmount,
+      o.totalAmount.toFixed(2),
+      o.collectedAmount.toFixed(2),
+      o.uncollectedAmount.toFixed(2),
       PAYMENT_STATUSES.find(s => s.value === o.paymentStatus)?.label || o.paymentStatus,
     ]);
     const csvContent = '\uFEFF' + [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -463,7 +463,7 @@ export default function SalesManagement() {
                       <TableCell className="text-right font-mono">{formatMoney(order.totalAmount)}</TableCell>
                       <TableCell className="py-1">
                         <div className="flex items-center gap-2 w-[120px]">
-                          <Progress value={progress} className="h-2 flex-1 [&>div]:bg-black" />
+                          <Progress value={progress} className={`h-2 flex-1 [&>div]:${progress >= 100 ? 'bg-green-500' : progress > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
                           <span className="text-[11px] text-muted-foreground tabular-nums w-8 text-right shrink-0">{Math.round(progress)}%</span>
                         </div>
                       </TableCell>
@@ -685,7 +685,7 @@ export default function SalesManagement() {
                 <div className="flex justify-between"><span>订单金额:</span><span className="font-mono">{formatMoney(selectedOrder.totalAmount)}</span></div>
                 <div className="flex justify-between"><span>已回款:</span><span className="font-mono">{formatMoney(selectedOrder.collectedAmount)}</span></div>
                 <div className="flex justify-between font-medium"><span>待回款:</span><span className="font-mono text-orange-600">{formatMoney(selectedOrder.uncollectedAmount)}</span></div>
-                <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className="h-2 mt-2 [&>div]:bg-black" />
+                <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className={`h-2 mt-2 [&>div]:${selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? 'bg-green-500' : selectedOrder.collectedAmount > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
               </div>
               <div className="space-y-2">
                 <Label>回款金额 (¥)</Label>
@@ -747,7 +747,7 @@ export default function SalesManagement() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">回款进度</span>
                 <div className="flex items-center gap-2 w-[100px]">
-                  <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className="h-1.5 flex-1 [&>div]:bg-black" />
+                  <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className={`h-1.5 flex-1 [&>div]:${selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? 'bg-green-500' : selectedOrder.collectedAmount > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
                   <span className="text-[11px] text-muted-foreground tabular-nums">{selectedOrder.totalAmount > 0 ? `${Math.round(selectedOrder.collectedAmount / selectedOrder.totalAmount * 100)}%` : '-'}</span>
                 </div>
               </div>
