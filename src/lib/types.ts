@@ -157,6 +157,7 @@ export interface ProductionOrderItem {
   inputWeight: number;
   currentStock: number;
   outputWeight: number;
+  outputProductName: string;
   yieldRate: number;
   remark: string;
 }

@@ -108,16 +108,18 @@ function PriceChart({
               tickFormatter={(value) => value}
             />
             <YAxis
+              dataKey="avgPrice"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
+              width={60}
               tickFormatter={(value) => `¥${value}`}
             />
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  formatter={(value: number) => [
-                    `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}/KG`,
+                  formatter={(value) => [
+                    `¥${(value as number).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}/KG`,
                     '均价',
                   ]}
                 />

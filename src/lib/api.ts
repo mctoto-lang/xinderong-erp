@@ -112,6 +112,9 @@ export const dbPaymentRecords = {
   getByOrderId: async (orderId: string) => {
     return apiGet('paymentRecords', { orderId }) as Promise<PaymentRecord[]>;
   },
+  removeByOrderId: async (orderId: string) => {
+    return apiRemoveByOrderId('paymentRecords', orderId);
+  },
 };
 
 export const dbSalesOrders = createEntityApi<SalesOrder>('salesOrders');
@@ -133,6 +136,9 @@ export const dbCollectionRecords = {
   ...createEntityApi<CollectionRecord>('collectionRecords'),
   getByOrderId: async (orderId: string) => {
     return apiGet('collectionRecords', { orderId }) as Promise<CollectionRecord[]>;
+  },
+  removeByOrderId: async (orderId: string) => {
+    return apiRemoveByOrderId('collectionRecords', orderId);
   },
 };
 

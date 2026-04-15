@@ -21,7 +21,7 @@ import {
   PaginationPrevious, PaginationNext, PaginationEllipsis,
 } from '@/components/ui/pagination';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, FileDown, Eye, Pencil, Trash2, CalendarIcon } from 'lucide-react';
+import { Plus, Search, FileDown, Eye, Pencil, Trash2, CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { dbLogisticsRecords, dbAuditLogs, dbPurchaseOrders, dbSalesOrders } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
@@ -36,7 +36,109 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import type { LogisticsRecord, PurchaseOrder, SalesOrder } from '@/lib/types';
+
+// Order Select Combobox Component
+function OrderSelectCombobox({
+  type,
+  value,
+  onChange,
+  purchaseOrders,
+  salesOrders,
+}: {
+  type: 'purchase' | 'sale';
+  value: string;
+  onChange: (value: string) => void;
+  purchaseOrders: PurchaseOrder[];
+  salesOrders: SalesOrder[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const orders = type === 'purchase' ? purchaseOrders : salesOrders;
+  const filteredOrders = orders.filter(order => {
+    const searchLower = searchQuery.toLowerCase();
+    if (type === 'purchase') {
+      const po = order as PurchaseOrder;
+      return po.orderNo.toLowerCase().includes(searchLower) ||
+             po.supplierName.toLowerCase().includes(searchLower);
+    } else {
+      const so = order as SalesOrder;
+      return so.orderNo.toLowerCase().includes(searchLower) ||
+             so.customerName.toLowerCase().includes(searchLower);
+    }
+  });
+
+  const selectedOrder = orders.find(o => o.orderNo === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between h-9 font-normal"
+        >
+          {selectedOrder ? (
+            <span className="truncate">
+              {selectedOrder.orderNo} - {type === 'purchase' ? (selectedOrder as PurchaseOrder).supplierName : (selectedOrder as SalesOrder).customerName}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              {type === 'purchase' ? '选择进货单' : '选择出货单'}
+            </span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput 
+            placeholder="搜索单号或名称..." 
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {searchQuery ? '未找到匹配单据' : '暂无可选单据'}
+            </CommandEmpty>
+            <CommandGroup>
+              {filteredOrders.slice(0, 50).map(order => (
+                <CommandItem
+                  key={order.id}
+                  value={order.orderNo}
+                  onSelect={() => {
+                    onChange(order.orderNo);
+                    setOpen(false);
+                    setSearchQuery('');
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === order.orderNo ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span className="truncate">
+                    {order.orderNo} - {type === 'purchase' ? (order as PurchaseOrder).supplierName : (order as SalesOrder).customerName}
+                  </span>
+                </CommandItem>
+              ))}
+              {filteredOrders.length > 50 && (
+                <div className="px-2 py-1 text-xs text-muted-foreground text-center">
+                  显示前50条，共{filteredOrders.length}条
+                </div>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function LogisticsManagement() {
   const { currentUser } = useAppStore();
@@ -122,7 +224,7 @@ export default function LogisticsManagement() {
   const openEdit = (r: LogisticsRecord) => { setEditing(r); setForm({ type: r.type, relatedOrderNo: r.relatedOrderNo, plateNumber: r.plateNumber, driver: r.driver, freight: r.freight, date: r.date, fromAddress: r.fromAddress, toAddress: r.toAddress, status: r.status, remark: r.remark }); setShowDialog(true); };
 
   const save = async () => {
-    if (!form.relatedOrderNo) { toast.error('请输入关联单据'); return; }
+    if (!form.relatedOrderNo) { toast.error('请选择关联单据'); return; }
     if (editing) { await dbLogisticsRecords.put({ ...editing, ...form }); toast.success('记录已更新'); }
     else { await dbLogisticsRecords.add(form); toast.success('记录已创建'); }
     await dbAuditLogs.add({ operator: currentUser?.name || '', module: '物流运输', action: editing ? '编辑' : '新建', detail: `${editing ? '编辑' : '新建'}物流记录 ${form.relatedOrderNo}` });
@@ -236,15 +338,13 @@ export default function LogisticsManagement() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label>类型</Label><Select value={form.type} onValueChange={v => setForm({ ...form, type: v as 'purchase' | 'sale', relatedOrderNo: '' })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="purchase">采购</SelectItem><SelectItem value="sale">出货</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>关联单据 *</Label>
-              <Select value={form.relatedOrderNo} onValueChange={v => setForm({ ...form, relatedOrderNo: v })}>
-                <SelectTrigger><SelectValue placeholder={form.type === 'purchase' ? '选择进货单' : '选择出货单'} /></SelectTrigger>
-                <SelectContent>
-                  {form.type === 'purchase'
-                    ? purchaseOrders.map(o => <SelectItem key={o.id} value={o.orderNo}>{o.orderNo} - {o.supplierName}</SelectItem>)
-                    : salesOrders.map(o => <SelectItem key={o.id} value={o.orderNo}>{o.orderNo} - {o.customerName}</SelectItem>)
-                  }
-                </SelectContent>
-              </Select>
+              <OrderSelectCombobox
+                type={form.type}
+                value={form.relatedOrderNo}
+                onChange={v => setForm({ ...form, relatedOrderNo: v })}
+                purchaseOrders={purchaseOrders}
+                salesOrders={salesOrders}
+              />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

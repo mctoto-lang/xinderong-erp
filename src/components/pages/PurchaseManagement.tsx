@@ -295,7 +295,7 @@ export default function PurchaseManagement() {
       freight: orderForm.freight,
       paidAmount: editingOrder?.paidAmount || 0,
       unpaidAmount: totalAmount - (editingOrder?.paidAmount || 0),
-      paymentStatus: editingOrder?.paymentStatus || 'unpaid',
+      paymentStatus: (editingOrder?.paidAmount || 0) >= totalAmount ? 'paid' : (editingOrder?.paidAmount || 0) > 0 ? 'partial' : 'unpaid',
       remark: orderForm.remark,
       createdBy: currentUser?.name || '',
     };
@@ -390,6 +390,7 @@ export default function PurchaseManagement() {
     }
 
     await dbPurchaseOrderItems.removeByOrderId(id);
+    await dbPaymentRecords.removeByOrderId(id);
     await dbPurchaseOrders.remove(id);
 
     await dbAuditLogs.add({
@@ -570,7 +571,11 @@ export default function PurchaseManagement() {
                       <TableCell className="text-right font-mono">{formatMoney(order.totalAmount)}</TableCell>
                       <TableCell className="py-1">
                         <div className="flex items-center gap-2 w-[120px]">
-                          <Progress value={progress} className={`h-2 flex-1 [&>div]:${progress >= 100 ? 'bg-green-500' : progress > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                          <Progress 
+                            value={progress} 
+                            className="h-2 flex-1" 
+                            indicatorColor={progress >= 100 ? '#22c55e' : progress > 0 ? '#eab308' : '#d1d5db'}
+                          />
                           <span className="text-[11px] text-muted-foreground tabular-nums w-8 text-right shrink-0">{Math.round(progress)}%</span>
                         </div>
                       </TableCell>
@@ -1059,9 +1064,9 @@ export default function PurchaseManagement() {
                       <tr style={{ borderBottom: '1.5px solid #000' }}>
                         <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '45px' }}>序号</th>
                         <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '150px' }}>名称</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '110px' }}>（数量/KG）</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '120px' }}>单价（元/KG）</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, width: '130px' }}>金额（元）</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '110px' }}>数量(KG)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '120px' }}>单价(元/KG)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, width: '130px' }}>金额(元)</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -41,6 +41,16 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-gold-50: #FFF9E6;
+  --color-gold-100: #FFF0BF;
+  --color-gold-200: #FFE699;
+  --color-gold-300: #E8D48B;
+  --color-gold-400: #D4AF37;
+  --color-gold-500: #C9A84C;
+  --color-gold-600: #B8962E;
+  --color-gold-700: #8B7225;
+  --color-gold-800: #5E4D19;
+  --color-gold-900: #31290D;
 }
 
 :root {

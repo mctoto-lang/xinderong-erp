@@ -75,18 +75,19 @@ export default function FinanceManagement() {
   const totalRevenue = salesOrders.reduce((s, o) => s + o.totalAmount, 0);
   const totalCost = purchaseOrders.reduce((s, o) => s + o.totalAmount, 0);
   const totalFreight = purchaseOrders.reduce((s, o) => s + o.freight, 0);
-  const totalGrossProfit = totalRevenue - totalCost;
+  const totalCostWithoutFreight = totalCost - totalFreight;
+  const totalGrossProfit = totalRevenue - totalCostWithoutFreight;
   const totalNetProfit = totalGrossProfit - totalFreight;
 
   // All transactions
   const allTransactions = [
     ...payments.map(p => {
       const po = purchaseOrders.find(o => o.id === p.orderId);
-      return { date: p.date, type: '付款' as const, orderNo: po?.orderNo || p.orderId, target: po?.supplierName || p.remark || '', amount: -p.amount, method: p.method, remark: p.remark };
+      return { date: p.date, type: '付款' as const, orderNo: po?.orderNo || '(订单已删除)', target: po?.supplierName || p.remark || '-', amount: -p.amount, method: p.method, remark: p.remark };
     }),
     ...collections.map(c => {
       const so = salesOrders.find(o => o.id === c.orderId);
-      return { date: c.date, type: '回款' as const, orderNo: so?.orderNo || c.orderId, target: so?.customerName || c.remark || '', amount: c.amount, method: c.method, remark: c.remark };
+      return { date: c.date, type: '回款' as const, orderNo: so?.orderNo || '(订单已删除)', target: so?.customerName || c.remark || '-', amount: c.amount, method: c.method, remark: c.remark };
     }),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
@@ -134,9 +135,9 @@ export default function FinanceManagement() {
     revenue: data.revenue,
     cost: data.cost,
     freight: data.freight,
-    grossProfit: data.revenue - data.cost,
-    netProfit: data.revenue - data.cost - data.freight,
-    margin: data.revenue > 0 ? ((data.revenue - data.cost) / data.revenue * 100) : 0,
+    grossProfit: data.revenue - (data.cost - data.freight),
+    netProfit: data.revenue - data.cost,
+    margin: data.revenue > 0 ? ((data.revenue - (data.cost - data.freight)) / data.revenue * 100) : 0,
   }));
 
   if (loading) return <LoadingSkeleton />;

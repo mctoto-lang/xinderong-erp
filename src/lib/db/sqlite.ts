@@ -167,6 +167,7 @@ db.exec(`
     inputWeight REAL DEFAULT 0,
     currentStock REAL DEFAULT 0,
     outputWeight REAL DEFAULT 0,
+    outputProductName TEXT,
     yieldRate REAL DEFAULT 0,
     remark TEXT
   );
@@ -243,6 +244,17 @@ if (!adminExists) {
     INSERT INTO users (id, username, password, name, role, status)
     VALUES ('admin', 'admin', 'admin123', '系统管理员', 'admin', 'active')
   `).run();
+}
+
+// Migration: Add outputProductName column to production_order_items if not exists
+try {
+  const columns = db.prepare("PRAGMA table_info(production_order_items)").all() as { name: string }[];
+  const hasOutputProductName = columns.some(col => col.name === 'outputProductName');
+  if (!hasOutputProductName) {
+    db.prepare('ALTER TABLE production_order_items ADD COLUMN outputProductName TEXT').run();
+  }
+} catch {
+  // Table might not exist yet, ignore
 }
 
 export default db;

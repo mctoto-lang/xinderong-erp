@@ -19,13 +19,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Search, FileDown, Eye, Trash2, Play, CheckCircle2, X, ChevronLeft, ChevronRight, CalendarIcon } from 'lucide-react';
+import { Plus, Search, FileDown, Eye, Trash2, Play, CheckCircle2, CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { format as dateFnsFormat, parse as dateFnsParse } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { dbProductionOrders, dbProductionOrderItems, dbPurchaseOrderItems, dbInventory, dbInventoryLogs, dbAuditLogs } from '@/lib/api';
+import { dbProductionOrders, dbProductionOrderItems, dbProductCategories, dbInventory, dbInventoryLogs, dbAuditLogs } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { formatMoney, formatDate, formatWeight, formatYieldRate, getTodayStr } from '@/lib/format';
 import { IconButton } from '@/components/shared/IconButton';
@@ -33,16 +33,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import type { ProductionOrder, ProductionOrderItem, PurchaseOrderItem } from '@/lib/types';
+import type { ProductionOrder, ProductionOrderItem, ProductCategory } from '@/lib/types';
 
-// Tag colors for raw material selection (max 3)
-const TAG_COLORS = [
-  'bg-blue-100 text-blue-700 border-blue-200',
-  'bg-emerald-100 text-emerald-700 border-emerald-200',
-  'bg-amber-100 text-amber-700 border-amber-200',
-];
-
-// Breathing dot status component
 function StatusDot({ status }: { status: string }) {
   const config: Record<string, { color: string; label: string; bgColor: string; borderColor: string }> = {
     completed: { color: 'bg-green-500', label: '完成', bgColor: 'bg-green-50', borderColor: 'border-green-200' },
@@ -76,29 +68,33 @@ export default function ProductionManagement() {
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Available raw materials from purchase orders
-  const [availableMaterials, setAvailableMaterials] = useState<PurchaseOrderItem[]>([]);
+  // Raw materials (purchase categories) and finished products (sale categories)
+  const [rawMaterials, setRawMaterials] = useState<ProductCategory[]>([]);
+  const [finishedProducts, setFinishedProducts] = useState<ProductCategory[]>([]);
 
+  // Form state
   const [formDate, setFormDate] = useState(getTodayStr());
   const [formRemark, setFormRemark] = useState('');
-  // Max 3 selected materials, each with inputWeight
-  const [formItems, setFormItems] = useState<Array<{ productId: string; productName: string; inputWeight: number; remark: string }>>([]);
-  const [completeItems, setCompleteItems] = useState<ProductionOrderItem[]>([]);
+  const [formRawMaterialId, setFormRawMaterialId] = useState('');
+  const [formRawMaterialName, setFormRawMaterialName] = useState('');
+  const [formInputWeight, setFormInputWeight] = useState(0);
+  const [formOutputProductId, setFormOutputProductId] = useState('');
+  const [formOutputProductName, setFormOutputProductName] = useState('');
+
+  // Complete dialog state
+  const [completeOutputWeight, setCompleteOutputWeight] = useState(0);
+  const [completeInputWeight, setCompleteInputWeight] = useState(0);
+
   const [detailItems, setDetailItems] = useState<ProductionOrderItem[]>([]);
-  // Cache: orderId -> items
   const [orderItemsMap, setOrderItemsMap] = useState<Record<string, ProductionOrderItem[]>>({});
 
-  // Load available materials (unique products from purchase order items)
-  const loadMaterials = useCallback(async () => {
-    const allItems = await dbPurchaseOrderItems.getAll();
-    // Deduplicate by productName
-    const seen = new Map<string, PurchaseOrderItem>();
-    for (const item of allItems) {
-      if (!seen.has(item.productName)) {
-        seen.set(item.productName, item);
-      }
-    }
-    setAvailableMaterials(Array.from(seen.values()));
+  const loadCategories = useCallback(async () => {
+    const [purchase, sale] = await Promise.all([
+      dbProductCategories.getByCategory('purchase'),
+      dbProductCategories.getByCategory('sale'),
+    ]);
+    setRawMaterials(purchase.filter(c => c.status === 'active'));
+    setFinishedProducts(sale.filter(c => c.status === 'active'));
   }, []);
 
   const initialLoadRef = useRef(true);
@@ -106,7 +102,7 @@ export default function ProductionManagement() {
     try {
       const [list] = await Promise.all([
         dbProductionOrders.getAll(),
-        loadMaterials(),
+        loadCategories(),
       ]);
       list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setOrders(list);
@@ -124,7 +120,7 @@ export default function ProductionManagement() {
         initialLoadRef.current = false;
       }
     }
-  }, [loadMaterials]);
+  }, [loadCategories]);
 
   useEffect(() => {
     loadData();
@@ -172,56 +168,82 @@ export default function ProductionManagement() {
       : 0,
   };
 
-  // Select a raw material (max 3)
-  const selectMaterial = (item: PurchaseOrderItem) => {
-    if (formItems.length >= 3) {
-      toast.error('最多选择3项原料');
-      return;
+  const selectRawMaterial = (id: string) => {
+    const material = rawMaterials.find(m => m.id === id);
+    if (material) {
+      setFormRawMaterialId(id);
+      setFormRawMaterialName(material.name);
     }
-    if (formItems.some(f => f.productId === item.productId && f.productName === item.productName)) {
-      toast.error('该原料已选择');
-      return;
-    }
-    setFormItems(prev => [...prev, {
-      productId: item.productId || item.productName,
-      productName: item.productName,
-      inputWeight: 0,
-      remark: '',
-    }]);
   };
 
-  const removeFormItem = (idx: number) => {
-    setFormItems(prev => prev.filter((_, i) => i !== idx));
+  const selectOutputProduct = (id: string) => {
+    const product = finishedProducts.find(p => p.id === id);
+    if (product) {
+      setFormOutputProductId(id);
+      setFormOutputProductName(product.name);
+    }
   };
 
   const createOrder = async () => {
-    const validItems = formItems.filter(i => i.productName && i.inputWeight > 0);
-    if (validItems.length === 0) { toast.error('请选择至少一项原料并输入重量'); return; }
+    if (!formRawMaterialId) {
+      toast.error('请选择生产原料');
+      return;
+    }
+    if (!formOutputProductId) {
+      toast.error('请选择产出成品');
+      return;
+    }
+    if (formInputWeight <= 0) {
+      toast.error('请输入投入重量');
+      return;
+    }
 
     const res = await fetch(`/api/orderNo?prefix=SCD&date=${formDate}`);
     const data = await res.json();
     const orderNo = data.orderNo;
-    const inputTotal = validItems.reduce((s, i) => s + i.inputWeight, 0);
+
     const order = await dbProductionOrders.add({
-      orderNo, date: formDate, status: 'pending', inputTotal, outputTotal: 0, avgYieldRate: 0,
-      remark: formRemark, createdBy: currentUser?.name || '',
+      orderNo,
+      date: formDate,
+      status: 'pending',
+      inputTotal: formInputWeight,
+      outputTotal: 0,
+      avgYieldRate: 0,
+      remark: formRemark,
+      createdBy: currentUser?.name || '',
     });
 
-    await dbProductionOrderItems.addBatch(validItems.map(i => ({
-      orderId: order.id, productId: i.productId || '', productName: i.productName,
-      inputWeight: i.inputWeight, currentStock: 0, outputWeight: 0, yieldRate: 0, remark: i.remark,
-    })));
+    await dbProductionOrderItems.addBatch([{
+      orderId: order.id,
+      productId: formRawMaterialId,
+      productName: formRawMaterialName,
+      inputWeight: formInputWeight,
+      currentStock: 0,
+      outputWeight: 0,
+      outputProductName: formOutputProductName,
+      yieldRate: 0,
+      remark: '',
+    }]);
 
     await dbAuditLogs.add({ operator: currentUser?.name || '', module: '生产加工', action: '新建', detail: `新建生产单 ${orderNo}` });
     toast.success('生产单已创建');
     setShowNewDialog(false);
-    setFormItems([]);
+    resetForm();
     loadData();
+  };
+
+  const resetForm = () => {
+    setFormDate(getTodayStr());
+    setFormRemark('');
+    setFormRawMaterialId('');
+    setFormRawMaterialName('');
+    setFormInputWeight(0);
+    setFormOutputProductId('');
+    setFormOutputProductName('');
   };
 
   const startProcessing = async (order: ProductionOrder) => {
     const items = await dbProductionOrderItems.getByOrderId(order.id);
-    // Lock raw materials
     for (const item of items) {
       const allInv = await dbInventory.getAll();
       const inv = allInv.find(i => i.productName === item.productName);
@@ -229,9 +251,14 @@ export default function ProductionManagement() {
         const newStock = Math.max(0, inv.rawMaterialStock - item.inputWeight);
         await dbInventory.put({ ...inv, rawMaterialStock: newStock });
         await dbInventoryLogs.add({
-          inventoryId: inv.id, productName: item.productName, logType: '生产投料',
-          relatedOrderNo: order.orderNo, quantity: -item.inputWeight, balance: newStock,
-          remark: `生产单 ${order.orderNo}`, operator: currentUser?.name || '',
+          inventoryId: inv.id,
+          productName: item.productName,
+          logType: '生产投料',
+          relatedOrderNo: order.orderNo,
+          quantity: -item.inputWeight,
+          balance: newStock,
+          remark: `生产单 ${order.orderNo}`,
+          operator: currentUser?.name || '',
         });
       }
     }
@@ -243,54 +270,71 @@ export default function ProductionManagement() {
   const openComplete = async (order: ProductionOrder) => {
     setSelectedOrder(order);
     const items = await dbProductionOrderItems.getByOrderId(order.id);
-    setCompleteItems(items);
+    if (items.length > 0) {
+      setCompleteInputWeight(items[0].inputWeight);
+    }
+    setCompleteOutputWeight(0);
     setShowCompleteDialog(true);
   };
 
   const completeOrder = async () => {
     if (!selectedOrder) return;
-    let totalInput = 0, totalOutput = 0;
-    const updatedItems: ProductionOrderItem[] = [];
-
-    for (const item of completeItems) {
-      if (item.outputWeight > 0) {
-        updatedItems.push({ ...item, yieldRate: item.inputWeight > 0 ? item.outputWeight / item.inputWeight : 0 });
-        totalInput += item.inputWeight;
-        totalOutput += item.outputWeight;
-      } else {
-        updatedItems.push(item);
-        totalInput += item.inputWeight;
-      }
+    if (completeOutputWeight <= 0) {
+      toast.error('请输入产出重量');
+      return;
     }
 
-    // Add finished products to inventory
-    for (const item of updatedItems) {
-      if (item.outputWeight > 0) {
-        const allInv = await dbInventory.getAll();
-        let inv = allInv.find(i => i.productName === item.productName);
-        if (!inv) {
-          inv = await dbInventory.add({ productName: item.productName, category: '成品', rawMaterialStock: 0, finishedProductStock: 0, warningThreshold: 100, status: 'normal' });
-        }
-        const newStock = inv.finishedProductStock + item.outputWeight;
-        await dbInventory.put({ ...inv, finishedProductStock: newStock });
-        await dbInventoryLogs.add({
-          inventoryId: inv.id, productName: item.productName, logType: '生产入库',
-          relatedOrderNo: selectedOrder.orderNo, quantity: item.outputWeight, balance: newStock,
-          remark: `生产单 ${selectedOrder.orderNo}`, operator: currentUser?.name || '',
-        });
-      }
-      await dbProductionOrderItems.put(item);
+    const items = await dbProductionOrderItems.getByOrderId(selectedOrder.id);
+    const yieldRate = completeInputWeight > 0 ? completeOutputWeight / completeInputWeight : 0;
+    const outputProductName = items[0]?.outputProductName || '';
+
+    // Update production order items with output info
+    for (const item of items) {
+      await dbProductionOrderItems.put({
+        ...item,
+        outputWeight: completeOutputWeight,
+        yieldRate,
+      });
     }
 
-    const avgYield = totalInput > 0 ? totalOutput / totalInput : 0;
-    await dbProductionOrders.put({ ...selectedOrder, status: 'completed', outputTotal: totalOutput, avgYieldRate: avgYield });
+    // Add finished product to inventory
+    const allInv = await dbInventory.getAll();
+    let inv = allInv.find(i => i.productName === outputProductName);
+    if (!inv) {
+      inv = await dbInventory.add({
+        productName: outputProductName,
+        category: '成品',
+        rawMaterialStock: 0,
+        finishedProductStock: 0,
+        warningThreshold: 100,
+        status: 'normal',
+      });
+    }
+    const newFinishedStock = inv.finishedProductStock + completeOutputWeight;
+    await dbInventory.put({ ...inv, finishedProductStock: newFinishedStock });
+    await dbInventoryLogs.add({
+      inventoryId: inv.id,
+      productName: outputProductName,
+      logType: '生产入库',
+      relatedOrderNo: selectedOrder.orderNo,
+      quantity: completeOutputWeight,
+      balance: newFinishedStock,
+      remark: `生产单 ${selectedOrder.orderNo}`,
+      operator: currentUser?.name || '',
+    });
+
+    await dbProductionOrders.put({
+      ...selectedOrder,
+      status: 'completed',
+      outputTotal: completeOutputWeight,
+      avgYieldRate: yieldRate,
+    });
     await dbAuditLogs.add({ operator: currentUser?.name || '', module: '生产加工', action: '完工', detail: `完工生产单 ${selectedOrder.orderNo}` });
-    toast.success('生产已完成，原料已转换为成品');
+    toast.success('生产已完成，成品已入库');
     setShowCompleteDialog(false);
     loadData();
   };
 
-  // Delete order in ANY status with proper inventory rollback
   const deleteOrder = async (id: string) => {
     const order = orders.find(o => o.id === id);
     if (!order) return;
@@ -298,7 +342,6 @@ export default function ProductionManagement() {
     const items = await dbProductionOrderItems.getByOrderId(id);
 
     if (order.status === 'processing') {
-      // Rollback: return locked raw materials
       for (const item of items) {
         const allInv = await dbInventory.getAll();
         const inv = allInv.find(i => i.productName === item.productName);
@@ -306,30 +349,56 @@ export default function ProductionManagement() {
           const newStock = inv.rawMaterialStock + item.inputWeight;
           await dbInventory.put({ ...inv, rawMaterialStock: newStock });
           await dbInventoryLogs.add({
-            inventoryId: inv.id, productName: item.productName, logType: '生产撤销',
-            relatedOrderNo: order.orderNo, quantity: item.inputWeight, balance: newStock,
-            remark: `删除加工中生产单 ${order.orderNo}`, operator: currentUser?.name || '',
+            inventoryId: inv.id,
+            productName: item.productName,
+            logType: '生产撤销',
+            relatedOrderNo: order.orderNo,
+            quantity: item.inputWeight,
+            balance: newStock,
+            remark: `删除加工中生产单 ${order.orderNo}`,
+            operator: currentUser?.name || '',
           });
         }
       }
     }
 
     if (order.status === 'completed') {
-      // Rollback: remove finished products, return raw materials
       for (const item of items) {
-        const allInv = await dbInventory.getAll();
-        const inv = allInv.find(i => i.productName === item.productName);
-        if (inv) {
-          // Remove finished products
-          const newFinished = Math.max(0, inv.finishedProductStock - (item.outputWeight || 0));
-          // Return raw materials
-          const newRaw = inv.rawMaterialStock + item.inputWeight;
-          await dbInventory.put({ ...inv, finishedProductStock: newFinished, rawMaterialStock: newRaw });
+        // Return raw material
+        const allInvRaw = await dbInventory.getAll();
+        const invRaw = allInvRaw.find(i => i.productName === item.productName);
+        if (invRaw) {
+          const newRaw = invRaw.rawMaterialStock + item.inputWeight;
+          await dbInventory.put({ ...invRaw, rawMaterialStock: newRaw });
           await dbInventoryLogs.add({
-            inventoryId: inv.id, productName: item.productName, logType: '生产撤销',
-            relatedOrderNo: order.orderNo, quantity: -(item.outputWeight || 0), balance: newFinished,
-            remark: `删除已完成生产单 ${order.orderNo}，退回原料`, operator: currentUser?.name || '',
+            inventoryId: invRaw.id,
+            productName: item.productName,
+            logType: '生产撤销',
+            relatedOrderNo: order.orderNo,
+            quantity: item.inputWeight,
+            balance: newRaw,
+            remark: `删除已完成生产单 ${order.orderNo}，退回原料`,
+            operator: currentUser?.name || '',
           });
+        }
+        // Remove finished product
+        if (item.outputWeight > 0 && item.outputProductName) {
+          const allInvFinished = await dbInventory.getAll();
+          const invFinished = allInvFinished.find(i => i.productName === item.outputProductName);
+          if (invFinished) {
+            const newFinished = Math.max(0, invFinished.finishedProductStock - item.outputWeight);
+            await dbInventory.put({ ...invFinished, finishedProductStock: newFinished });
+            await dbInventoryLogs.add({
+              inventoryId: invFinished.id,
+              productName: item.outputProductName,
+              logType: '生产撤销',
+              relatedOrderNo: order.orderNo,
+              quantity: -item.outputWeight,
+              balance: newFinished,
+              remark: `删除已完成生产单 ${order.orderNo}，扣减成品`,
+              operator: currentUser?.name || '',
+            });
+          }
         }
       }
     }
@@ -374,7 +443,6 @@ export default function ProductionManagement() {
     <div className="p-4 space-y-3">
       <div><h2 className="text-lg font-semibold">生产加工</h2><p className="text-sm text-muted-foreground">管理生产单、投料、完工和成品率</p></div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-gray-200"><CardContent className="pt-6"><div className="text-sm text-muted-foreground">待加工</div><div className="text-2xl font-bold mt-1">{stats.pending}</div></CardContent></Card>
         <Card className="border-gray-200"><CardContent className="pt-6"><div className="text-sm text-muted-foreground">加工中</div><div className="text-2xl font-bold mt-1 text-blue-600">{stats.processing}</div></CardContent></Card>
@@ -382,7 +450,6 @@ export default function ProductionManagement() {
         <Card className="border-gray-200"><CardContent className="pt-6"><div className="text-sm text-muted-foreground">平均成品率</div><div className="text-2xl font-bold mt-1">{formatYieldRate(stats.avgYield)}</div></CardContent></Card>
       </div>
 
-      {/* Toolbar */}
       <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
@@ -398,12 +465,11 @@ export default function ProductionManagement() {
               <SelectItem value="completed">已完成</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={() => { setFormDate(getTodayStr()); setFormRemark(''); setFormItems([]); setShowNewDialog(true); }} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新建生产单</Button>
+          <Button onClick={() => { resetForm(); setShowNewDialog(true); }} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新建生产单</Button>
           <Button variant="outline" onClick={handleExport} className="border-green-600 text-green-600 hover:bg-green-50 hover:text-green-700"><FileDown className="h-4 w-4 mr-1" />导出Excel</Button>
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
         {filtered.length === 0 ? <EmptyState title="暂无生产单" /> : (
           <div className="overflow-x-auto">
@@ -412,27 +478,23 @@ export default function ProductionManagement() {
                 <TableHead>生产编号</TableHead>
                 <TableHead>日期</TableHead>
                 <TableHead>生产原料</TableHead>
+                <TableHead>产出成品</TableHead>
                 <TableHead>状态</TableHead>
-                <TableHead className="text-right">投入总量</TableHead>
-                <TableHead className="text-right">产出总量</TableHead>
+                <TableHead className="text-right">投入量</TableHead>
+                <TableHead className="text-right">产出量</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {paginatedOrders.map(order => {
                   const items = orderItemsMap[order.id] || [];
+                  const rawMaterial = items[0]?.productName || '-';
+                  const outputProduct = items[0]?.outputProductName || '-';
                   return (
                   <TableRow key={order.id}>
                     <TableCell className="font-mono text-xs">{order.orderNo}</TableCell>
                     <TableCell>{formatDate(order.date)}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {items.map((item, idx) => (
-                          <span key={item.id} className="text-sm text-black">
-                            {item.productName}
-                          </span>
-                        ))}
-                      </div>
-                    </TableCell>
+                    <TableCell>{rawMaterial}</TableCell>
+                    <TableCell>{outputProduct}</TableCell>
                     <TableCell><StatusDot status={order.status} /></TableCell>
                     <TableCell className="text-right font-mono">{formatWeight(order.inputTotal)}</TableCell>
                     <TableCell className="text-right font-mono">{formatWeight(order.outputTotal)}</TableCell>
@@ -457,7 +519,6 @@ export default function ProductionManagement() {
         )}
       </div>
 
-      {/* Pagination */}
       {filtered.length > 0 && totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -497,9 +558,9 @@ export default function ProductionManagement() {
         </div>
       )}
 
-      {/* New Dialog - Select raw materials */}
+      {/* New Dialog */}
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>新建生产单</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -520,61 +581,45 @@ export default function ProductionManagement() {
             </div>
 
             <Separator />
+
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="font-medium">选择生产原料（最多3项）</Label>
-                <Badge variant="secondary" className="text-xs">{formItems.length}/3</Badge>
-              </div>
-              {availableMaterials.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">暂无可选原料，请先创建进货单</div>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {availableMaterials
-                    .filter(m => !formItems.some(f => f.productId === m.productId && f.productName === m.productName))
-                    .map(item => (
-                      <Button key={item.productId} variant="outline" size="sm" className="text-xs" onClick={() => selectMaterial(item)}>
-                        <Plus className="h-3 w-3 mr-1" />{item.productName}
-                      </Button>
-                    ))}
-                </div>
+              <Label className="font-medium">生产原料 <span className="text-red-500">*</span></Label>
+              <Select value={formRawMaterialId} onValueChange={selectRawMaterial}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择生产原料（进货分类）" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rawMaterials.map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}{m.spec ? ` (${m.spec})` : ''}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {rawMaterials.length === 0 && (
+                <p className="text-xs text-muted-foreground">暂无可选原料，请先在系统管理中添加进货分类</p>
               )}
             </div>
 
-            {formItems.length > 0 && (
-              <div className="space-y-2">
-                <Label className="font-medium">已选原料</Label>
-                <div className="border rounded-md">
-                  <Table>
-                    <TableHeader><TableRow>
-                      <TableHead>原料</TableHead>
-                      <TableHead className="w-36">投入重量(KG)</TableHead>
-                      <TableHead className="w-24">备注</TableHead>
-                      <TableHead className="w-12"></TableHead>
-                    </TableRow></TableHeader>
-                    <TableBody>
-                      {formItems.map((item, idx) => (
-                        <TableRow key={`${item.productId}-${idx}`}>
-                          <TableCell>
-                            <Badge variant="outline" className={TAG_COLORS[idx % TAG_COLORS.length]}>{item.productName}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Input type="number" value={item.inputWeight || ''} onChange={e => setFormItems(prev => prev.map((i, j) => j === idx ? { ...i, inputWeight: Number(e.target.value) || 0 } : i))} className="h-8" placeholder="重量" />
-                          </TableCell>
-                          <TableCell>
-                            <Input value={item.remark} onChange={e => setFormItems(prev => prev.map((i, j) => j === idx ? { ...i, remark: e.target.value } : i))} className="h-8" placeholder="选填" />
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFormItem(idx)}>
-                              <X className="h-3.5 w-3.5 text-red-500" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label className="font-medium">产出成品 <span className="text-red-500">*</span></Label>
+              <Select value={formOutputProductId} onValueChange={selectOutputProduct}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择产出成品（出货分类）" />
+                </SelectTrigger>
+                <SelectContent>
+                  {finishedProducts.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}{p.spec ? ` (${p.spec})` : ''}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {finishedProducts.length === 0 && (
+                <p className="text-xs text-muted-foreground">暂无可选成品，请先在系统管理中添加出货分类</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-medium">投入重量 (KG) <span className="text-red-500">*</span></Label>
+              <Input type="number" value={formInputWeight || ''} onChange={e => setFormInputWeight(Number(e.target.value) || 0)} placeholder="输入投入重量" />
+            </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setShowNewDialog(false)}>取消</Button><Button onClick={createOrder} className="bg-black text-white hover:bg-gray-800">创建</Button></DialogFooter>
         </DialogContent>
@@ -582,22 +627,39 @@ export default function ProductionManagement() {
 
       {/* Complete Dialog */}
       <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>完工录入</DialogTitle></DialogHeader>
-          <Table>
-            <TableHeader><TableRow><TableHead>产品</TableHead><TableHead className="text-right">投入</TableHead><TableHead className="text-right">产出(KG)</TableHead><TableHead className="text-right">成品率</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {completeItems.map((item, idx) => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.productName}</TableCell>
-                  <TableCell className="text-right font-mono">{formatWeight(item.inputWeight)}</TableCell>
-                  <TableCell><Input type="number" value={item.outputWeight || ''} onChange={e => setCompleteItems(prev => prev.map((i, j) => j === idx ? { ...i, outputWeight: Number(e.target.value) || 0 } : i))} className="h-8 w-28" /></TableCell>
-                  <TableCell className="text-right">{formatYieldRate(item.inputWeight > 0 ? (item.outputWeight || 0) / item.inputWeight : 0)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="text-sm text-muted-foreground text-right">
-            总投入: {formatWeight(completeItems.reduce((s, i) => s + i.inputWeight, 0))} | 总产出: {formatWeight(completeItems.reduce((s, i) => s + (i.outputWeight || 0), 0))} | 成品率: {formatYieldRate(completeItems.reduce((s, i) => s + i.inputWeight, 0) > 0 ? completeItems.reduce((s, i) => s + (i.outputWeight || 0), 0) / completeItems.reduce((s, i) => s + i.inputWeight, 0) : 0)}
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>完工录入</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-gray-50 rounded-md p-3 space-y-1 text-sm">
+              <div className="flex justify-between"><span>生产单号:</span><span className="font-medium">{selectedOrder?.orderNo}</span></div>
+              <div className="flex justify-between"><span>投入重量:</span><span className="font-mono">{formatWeight(completeInputWeight)}</span></div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label className="font-medium">产出成品</Label>
+              <div className="text-sm font-medium text-green-600 bg-green-50 rounded-md px-3 py-2">
+                {(() => {
+                  const items = selectedOrder ? orderItemsMap[selectedOrder.id] : [];
+                  return items[0]?.outputProductName || '-';
+                })()}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-medium">产出重量 (KG) <span className="text-red-500">*</span></Label>
+              <Input type="number" value={completeOutputWeight || ''} onChange={e => setCompleteOutputWeight(Number(e.target.value) || 0)} placeholder="输入产出重量" />
+            </div>
+
+            <div className="bg-blue-50 rounded-md p-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">成品率:</span>
+                <span className="font-mono font-medium text-blue-600">
+                  {formatYieldRate(completeInputWeight > 0 ? completeOutputWeight / completeInputWeight : 0)}
+                </span>
+              </div>
+            </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setShowCompleteDialog(false)}>取消</Button><Button onClick={completeOrder} className="bg-black text-white hover:bg-gray-800">确认完工</Button></DialogFooter>
         </DialogContent>
@@ -613,7 +675,6 @@ export default function ProductionManagement() {
       >
         {selectedOrder && (
           <>
-            {/* Summary */}
             <div className="rounded-lg border bg-card p-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">投入总量</span>
@@ -636,7 +697,6 @@ export default function ProductionManagement() {
               </div>
             </div>
 
-            {/* Basic Info */}
             <div className="rounded-lg border bg-card p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -656,27 +716,39 @@ export default function ProductionManagement() {
               )}
             </div>
 
-            {/* Production Items */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="h-1 w-1 rounded-full bg-foreground" />
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">生产明细</h4>
-                <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">{detailItems.length} 项</Badge>
               </div>
-              <DetailTable
-                columns={[
-                  { key: 'productName', label: '原料' },
-                  { key: 'inputWeight', label: '投入(KG)', align: 'right' },
-                  { key: 'outputWeight', label: '产出(KG)', align: 'right' },
-                  { key: 'yieldRate', label: '成品率', align: 'right' },
-                ]}
-                data={detailItems.map((item, idx) => ({
-                  productName: <Badge variant="outline" className={TAG_COLORS[idx % TAG_COLORS.length]}>{item.productName}</Badge>,
-                  inputWeight: formatWeight(item.inputWeight),
-                  outputWeight: formatWeight(item.outputWeight),
-                  yieldRate: formatYieldRate(item.yieldRate),
-                }))}
-              />
+              {detailItems.length > 0 ? (
+                <div className="rounded-lg border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/40 border-b">
+                        <th className="text-left py-2 px-3 font-medium">原料</th>
+                        <th className="text-left py-2 px-3 font-medium">成品</th>
+                        <th className="text-right py-2 px-3 font-medium">产出(KG)</th>
+                        <th className="text-right py-2 px-3 font-medium">成品率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailItems.map((item, idx) => (
+                        <tr key={idx} className="border-b last:border-b-0">
+                          <td className="py-2 px-3 font-medium">{item.productName}</td>
+                          <td className="py-2 px-3 text-green-600">{item.outputProductName || '-'}</td>
+                          <td className="py-2 px-3 text-right font-mono tabular-nums">{formatWeight(item.outputWeight)}</td>
+                          <td className="py-2 px-3 text-right font-mono tabular-nums">{formatYieldRate(item.yieldRate)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="rounded-lg border bg-muted/20 py-6 text-center text-xs text-muted-foreground">
+                  暂无生产明细
+                </div>
+              )}
             </div>
           </>
         )}

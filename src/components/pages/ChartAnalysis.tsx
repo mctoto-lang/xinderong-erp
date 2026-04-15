@@ -12,7 +12,7 @@ import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { format as dateFnsFormat, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear } from 'date-fns';
 import type { PurchaseOrder, SalesOrder, PurchaseOrderItem, SalesOrderItem } from '@/lib/types';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart } from 'recharts';
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell, ResponsiveContainer } from 'recharts';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
   type ChartConfig,
@@ -92,13 +92,13 @@ export default function ChartAnalysis() {
       poSpecMap[spec] = (poSpecMap[spec] || 0) + item.weight;
     });
   });
-  const poSpecData = Object.entries(poSpecMap).map(([name, weight]) => ({
-    name, weight, fill: `var(--color-${name.replace(/[^a-zA-Z0-9]/g, '_')})`,
+  const poSpecData = Object.entries(poSpecMap).map(([name, weight], i) => ({
+    name, weight, fill: CHART_COLORS[i % CHART_COLORS.length],
   })).sort((a, b) => b.weight - a.weight);
 
   const poSpecConfig: ChartConfig = { weight: { label: '重量(KG)' } };
   poSpecData.forEach((item, i) => {
-    poSpecConfig[item.name.replace(/[^a-zA-Z0-9]/g, '_')] = { label: item.name, color: CHART_COLORS[i % CHART_COLORS.length] };
+    poSpecConfig[item.name] = { label: item.name, color: CHART_COLORS[i % CHART_COLORS.length] };
   });
 
   // 2. 进货供应商占比
@@ -106,13 +106,13 @@ export default function ChartAnalysis() {
   poFiltered.forEach(o => {
     poSupplierMap[o.supplierName || '未知'] = (poSupplierMap[o.supplierName || '未知'] || 0) + o.totalAmount;
   });
-  const poSupplierPieData = Object.entries(poSupplierMap).map(([name, value]) => ({
-    name, value, fill: `var(--color-${name.replace(/[^a-zA-Z0-9]/g, '_')})`,
+  const poSupplierPieData = Object.entries(poSupplierMap).map(([name, value], i) => ({
+    name, value, fill: CHART_COLORS[i % CHART_COLORS.length],
   })).sort((a, b) => b.value - a.value);
 
   const poSupplierConfig: ChartConfig = { value: { label: '金额' } };
   poSupplierPieData.forEach((item, i) => {
-    poSupplierConfig[item.name.replace(/[^a-zA-Z0-9]/g, '_')] = { label: item.name, color: CHART_COLORS[i % CHART_COLORS.length] };
+    poSupplierConfig[item.name] = { label: item.name, color: CHART_COLORS[i % CHART_COLORS.length] };
   });
 
   // 3. 不同供应商供应不同产品量
@@ -152,7 +152,36 @@ export default function ChartAnalysis() {
   // ============ SALES CHARTS ============
   const soFiltered = salesOrders.filter(o => (!dateFromStr || o.date >= dateFromStr) && (!dateToStr || o.date <= dateToStr));
 
-  // 1. 不同客户出货规格分布
+  // 1. 出货产品占比（新增饼状图）
+  const soProductMap: Record<string, number> = {};
+  soFiltered.forEach(o => {
+    salesItems.filter(i => i.orderId === o.id).forEach(item => {
+      soProductMap[item.productName] = (soProductMap[item.productName] || 0) + item.weight;
+    });
+  });
+  const soProductPieData = Object.entries(soProductMap).map(([name, weight], i) => ({
+    name, weight, fill: CHART_COLORS[i % CHART_COLORS.length],
+  })).sort((a, b) => b.weight - a.weight);
+
+  const soProductConfig: ChartConfig = { weight: { label: '重量(KG)' } };
+  soProductPieData.forEach((item, i) => {
+    soProductConfig[item.name] = { label: item.name, color: CHART_COLORS[i % CHART_COLORS.length] };
+  });
+
+  // 2. 已回款和未回款占比（新增饼状图）
+  const totalCollected = soFiltered.reduce((sum, o) => sum + o.collectedAmount, 0);
+  const totalUncollected = soFiltered.reduce((sum, o) => sum + o.uncollectedAmount, 0);
+  const soPaymentPieData = [
+    { name: '已回款', value: totalCollected, fill: '#6ee7b7' },
+    { name: '未回款', value: totalUncollected, fill: '#fcd34d' },
+  ];
+  const soPaymentConfig: ChartConfig = {
+    value: { label: '金额' },
+    '已回款': { label: '已回款', color: '#6ee7b7' },
+    '未回款': { label: '未回款', color: '#fcd34d' },
+  };
+
+  // 3. 不同客户出货规格分布
   const soCustomerSpecMap: Record<string, Record<string, number>> = {};
   const soSpecNames = new Set<string>();
   soFiltered.forEach(o => {
@@ -171,7 +200,7 @@ export default function ChartAnalysis() {
     soCustomerSpecConfig[name] = { label: name, color: CHART_COLORS[i % CHART_COLORS.length] };
   });
 
-  // 2. 货品出货金额排行
+  // 4. 货品出货金额排行
   const soAmountMap: Record<string, number> = {};
   soFiltered.forEach(o => {
     salesItems.filter(i => i.orderId === o.id).forEach(item => {
@@ -182,7 +211,7 @@ export default function ChartAnalysis() {
 
   const soAmountConfig: ChartConfig = { amount: { label: '出货金额', color: 'var(--chart-2)' } };
 
-  // 3. 货品出货重量排行
+  // 5. 货品出货重量排行
   const soWeightMap: Record<string, number> = {};
   soFiltered.forEach(o => {
     salesItems.filter(i => i.orderId === o.id).forEach(item => {
@@ -219,23 +248,51 @@ export default function ChartAnalysis() {
         <TabsContent value="purchase" className="space-y-4 mt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">进货规格占比</CardTitle><CardDescription className="text-xs">按规格重量统计</CardDescription></CardHeader>
-              <CardContent>{poSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <ChartContainer config={poSpecConfig} className="mx-auto aspect-square max-h-[320px] [&_.recharts-pie-label-text]:fill-foreground">
-                  <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}><ChartTooltip content={<ChartTooltipContent nameKey="weight" hideLabel />} />
-                    <Pie data={poSpecData} dataKey="weight" nameKey="name" innerRadius={50} outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
-                  </PieChart>
-                </ChartContainer>
-              )}</CardContent>
+              <CardContent>
+                {poSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <div className="space-y-4">
+                    <ChartContainer config={poSpecConfig} className="mx-auto aspect-square max-h-[250px]">
+                      <PieChart>
+                        <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                        <Pie data={poSpecData} dataKey="weight" nameKey="name" innerRadius={50} outerRadius={80} />
+                      </PieChart>
+                    </ChartContainer>
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                      {poSpecData.map((item, i) => (
+                        <div key={item.name} className="flex items-center gap-1.5 text-xs">
+                          <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                          <span className="text-muted-foreground">{item.name}</span>
+                          <span className="font-medium">{((item.weight / poSpecData.reduce((s, d) => s + d.weight, 0)) * 100).toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
             </Card>
 
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">进货供应商占比</CardTitle><CardDescription className="text-xs">按供应商金额统计</CardDescription></CardHeader>
-              <CardContent>{poSupplierPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
-                <ChartContainer config={poSupplierConfig} className="mx-auto aspect-square max-h-[320px] [&_.recharts-pie-label-text]:fill-foreground">
-                  <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}><ChartTooltip content={<ChartTooltipContent nameKey="value" hideLabel />} />
-                    <Pie data={poSupplierPieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} />
-                  </PieChart>
-                </ChartContainer>
-              )}</CardContent>
+              <CardContent>
+                {poSupplierPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <div className="space-y-4">
+                    <ChartContainer config={poSupplierConfig} className="mx-auto aspect-square max-h-[250px]">
+                      <PieChart>
+                        <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                        <Pie data={poSupplierPieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} />
+                      </PieChart>
+                    </ChartContainer>
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                      {poSupplierPieData.map((item, i) => (
+                        <div key={item.name} className="flex items-center gap-1.5 text-xs">
+                          <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                          <span className="text-muted-foreground">{item.name}</span>
+                          <span className="font-medium">{((item.value / poSupplierPieData.reduce((s, d) => s + d.value, 0)) * 100).toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
             </Card>
           </div>
 
@@ -271,6 +328,62 @@ export default function ChartAnalysis() {
         </TabsContent>
 
         <TabsContent value="sales" className="space-y-4 mt-4">
+          {/* 新增：出货饼状图区域 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">回款状态占比</CardTitle><CardDescription className="text-xs">已回款与未回款金额统计</CardDescription></CardHeader>
+              <CardContent>
+                {(totalCollected + totalUncollected) === 0 ? <EmptyState title="暂无数据" /> : (
+                  <div className="space-y-4">
+                    <ChartContainer config={soPaymentConfig} className="mx-auto aspect-square max-h-[250px]">
+                      <PieChart>
+                        <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                        <Pie data={soPaymentPieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} />
+                      </PieChart>
+                    </ChartContainer>
+                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#6ee7b7' }} />
+                        <span className="text-muted-foreground">已回款</span>
+                        <span className="font-medium text-green-600">{formatMoney(totalCollected)}</span>
+                        <span className="text-muted-foreground">({((totalCollected / (totalCollected + totalUncollected)) * 100).toFixed(1)}%)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: '#fcd34d' }} />
+                        <span className="text-muted-foreground">未回款</span>
+                        <span className="font-medium text-orange-600">{formatMoney(totalUncollected)}</span>
+                        <span className="text-muted-foreground">({((totalUncollected / (totalCollected + totalUncollected)) * 100).toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card><CardHeader className="pb-2"><CardTitle className="text-sm">出货产品占比</CardTitle><CardDescription className="text-xs">按产品重量统计</CardDescription></CardHeader>
+              <CardContent>
+                {soProductPieData.length === 0 ? <EmptyState title="暂无数据" /> : (
+                  <div className="space-y-4">
+                    <ChartContainer config={soProductConfig} className="mx-auto aspect-square max-h-[250px]">
+                      <PieChart>
+                        <ChartTooltip content={<ChartTooltipContent nameKey="name" hideLabel />} />
+                        <Pie data={soProductPieData} dataKey="weight" nameKey="name" innerRadius={50} outerRadius={80} />
+                      </PieChart>
+                    </ChartContainer>
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                      {soProductPieData.map((item, i) => (
+                        <div key={item.name} className="flex items-center gap-1.5 text-xs">
+                          <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                          <span className="text-muted-foreground">{item.name}</span>
+                          <span className="font-medium">{((item.weight / soProductPieData.reduce((s, d) => s + d.weight, 0)) * 100).toFixed(1)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
           <Card><CardHeader className="pb-2"><CardTitle className="text-sm">不同客户出货规格分布</CardTitle><CardDescription className="text-xs">按客户和产品重量统计</CardDescription></CardHeader>
             <CardContent>{soCustomerSpecData.length === 0 ? <EmptyState title="暂无数据" /> : (
               <ChartContainer config={soCustomerSpecConfig} className="h-[300px] w-full">

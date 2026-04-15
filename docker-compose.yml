@@ -8,11 +8,13 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - xinderong-data:/app/data
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
 
-volumes:
-  xinderong-data:
-    driver: local
+# 数据持久化说明：
+# - 数据库文件存储在 ./data/erp.db
+# - 项目更新后只需重新拉取镜像并重启容器，数据不会丢失
+# - 备份数据：复制 ./data 目录即可
+# - 迁移数据：将 ./data 目录复制到新服务器

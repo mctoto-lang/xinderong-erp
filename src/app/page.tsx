@@ -34,12 +34,13 @@ const pages: Record<string, React.ComponentType> = {
 };
 
 export default function Home() {
-  const { isAuthenticated, activeModule, showWelcome } = useAppStore();
+  const { isAuthenticated, activeModule, showWelcome, setShowWelcome } = useAppStore();
+
+  if (showWelcome) {
+    return <WelcomePage onEnterBackend={() => setShowWelcome(false)} />;
+  }
 
   if (!isAuthenticated) {
-    if (showWelcome) {
-      return <WelcomePage />;
-    }
     return <LoginPage />;
   }
 

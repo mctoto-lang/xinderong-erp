@@ -193,14 +193,21 @@ export default function InventoryManagement() {
         soMap[item.productName] = (soMap[item.productName] || 0) + (item.weight || 0);
       }
       const prodItems = await dbProductionOrderItems.getAll();
+      const prodOrders = await dbProductionOrders.getAll();
       const prodInputMap: Record<string, number> = {};
       const prodOutputMap: Record<string, number> = {};
       for (const item of prodItems) {
-        if (item.inputWeight && item.productName) {
-          prodInputMap[item.productName] = (prodInputMap[item.productName] || 0) + item.inputWeight;
+        const order = prodOrders.find(o => o.id === item.orderId);
+        if (!order) continue;
+        if (order.status === 'processing' || order.status === 'completed') {
+          if (item.inputWeight && item.productName) {
+            prodInputMap[item.productName] = (prodInputMap[item.productName] || 0) + item.inputWeight;
+          }
         }
-        if (item.outputWeight && item.productName) {
-          prodOutputMap[item.productName] = (prodOutputMap[item.productName] || 0) + item.outputWeight;
+        if (order.status === 'completed') {
+          if (item.outputWeight && item.outputProductName) {
+            prodOutputMap[item.outputProductName] = (prodOutputMap[item.outputProductName] || 0) + item.outputWeight;
+          }
         }
       }
       const allProductNames = new Set([
@@ -215,7 +222,7 @@ export default function InventoryManagement() {
         if (!inv) {
           inv = await dbInventory.add({
             productName,
-            category: soMap[productName] ? '成品' : '原料',
+            category: soMap[productName] || prodOutputMap[productName] ? '成品' : '原料',
             rawMaterialStock: 0,
             finishedProductStock: 0,
             warningThreshold: 100,
@@ -228,7 +235,8 @@ export default function InventoryManagement() {
         const finishedFromProd = prodOutputMap[productName] || 0;
         const finishedSold = soMap[productName] || 0;
         const newFinished = Math.max(0, finishedFromProd - finishedSold);
-        await dbInventory.put({ ...inv, rawMaterialStock: newRaw, finishedProductStock: newFinished });
+        const isWarning = newRaw < inv.warningThreshold || newFinished < inv.warningThreshold;
+        await dbInventory.put({ ...inv, rawMaterialStock: newRaw, finishedProductStock: newFinished, status: isWarning ? 'warning' : 'normal' });
       }
       toast.success('库存已重置并重新计算');
       loadData();

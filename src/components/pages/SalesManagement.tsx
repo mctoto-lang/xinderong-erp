@@ -251,7 +251,7 @@ export default function SalesManagement() {
       totalAmount, freight: orderForm.freight,
       collectedAmount: editingOrder?.collectedAmount || 0,
       uncollectedAmount: totalAmount - (editingOrder?.collectedAmount || 0),
-      paymentStatus: editingOrder?.paymentStatus || 'unpaid',
+      paymentStatus: (editingOrder?.collectedAmount || 0) >= totalAmount ? 'paid' : (editingOrder?.collectedAmount || 0) > 0 ? 'partial' : 'unpaid',
       remark: orderForm.remark, createdBy: currentUser?.name || '',
     };
 
@@ -312,6 +312,7 @@ export default function SalesManagement() {
       }
     }
     await dbSalesOrderItems.removeByOrderId(id);
+    await dbCollectionRecords.removeByOrderId(id);
     await dbSalesOrders.remove(id);
     await dbAuditLogs.add({ operator: currentUser?.name || '', module: '出货管理', action: '删除', detail: `删除出货单 ${order.orderNo}` });
     toast.success('出货单已删除');
@@ -463,7 +464,11 @@ export default function SalesManagement() {
                       <TableCell className="text-right font-mono">{formatMoney(order.totalAmount)}</TableCell>
                       <TableCell className="py-1">
                         <div className="flex items-center gap-2 w-[120px]">
-                          <Progress value={progress} className={`h-2 flex-1 [&>div]:${progress >= 100 ? 'bg-green-500' : progress > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                          <Progress 
+                            value={progress} 
+                            className="h-2 flex-1" 
+                            indicatorColor={progress >= 100 ? '#22c55e' : progress > 0 ? '#eab308' : '#d1d5db'}
+                          />
                           <span className="text-[11px] text-muted-foreground tabular-nums w-8 text-right shrink-0">{Math.round(progress)}%</span>
                         </div>
                       </TableCell>
@@ -659,7 +664,7 @@ export default function SalesManagement() {
               <div className="flex items-center justify-end gap-3 pt-1">
                 <span className="text-sm text-muted-foreground">合计金额</span>
                 <span className="text-base font-semibold font-mono tabular-nums">
-                  {formatMoney(orderItems.reduce((sum, i) => sum + i.weight * i.unitPrice, 0))}
+                  {formatMoney(orderItems.reduce((sum, i) => sum + i.weight * i.unitPrice, 0) + (orderForm.freight || 0))}
                 </span>
               </div>
             </div>
@@ -685,7 +690,11 @@ export default function SalesManagement() {
                 <div className="flex justify-between"><span>订单金额:</span><span className="font-mono">{formatMoney(selectedOrder.totalAmount)}</span></div>
                 <div className="flex justify-between"><span>已回款:</span><span className="font-mono">{formatMoney(selectedOrder.collectedAmount)}</span></div>
                 <div className="flex justify-between font-medium"><span>待回款:</span><span className="font-mono text-orange-600">{formatMoney(selectedOrder.uncollectedAmount)}</span></div>
-                <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className={`h-2 mt-2 [&>div]:${selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? 'bg-green-500' : selectedOrder.collectedAmount > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                <Progress 
+                  value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} 
+                  className="h-2 mt-2" 
+                  indicatorColor={selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? '#22c55e' : selectedOrder.collectedAmount > 0 ? '#eab308' : '#d1d5db'}
+                />
               </div>
               <div className="space-y-2">
                 <Label>回款金额 (¥)</Label>
@@ -747,7 +756,11 @@ export default function SalesManagement() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">回款进度</span>
                 <div className="flex items-center gap-2 w-[100px]">
-                  <Progress value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} className={`h-1.5 flex-1 [&>div]:${selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? 'bg-green-500' : selectedOrder.collectedAmount > 0 ? 'bg-yellow-500' : 'bg-gray-300'}`} />
+                  <Progress 
+                    value={selectedOrder.totalAmount > 0 ? (selectedOrder.collectedAmount / selectedOrder.totalAmount) * 100 : 0} 
+                    className="h-1.5 flex-1" 
+                    indicatorColor={selectedOrder.totalAmount > 0 && selectedOrder.collectedAmount >= selectedOrder.totalAmount ? '#22c55e' : selectedOrder.collectedAmount > 0 ? '#eab308' : '#d1d5db'}
+                  />
                   <span className="text-[11px] text-muted-foreground tabular-nums">{selectedOrder.totalAmount > 0 ? `${Math.round(selectedOrder.collectedAmount / selectedOrder.totalAmount * 100)}%` : '-'}</span>
                 </div>
               </div>
@@ -950,8 +963,8 @@ export default function SalesManagement() {
                         <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '45px' }}>序号</th>
                         <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '150px' }}>名称</th>
                         <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '110px' }}>数量（KG）</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '120px' }}>单价（元/KG）</th>
-                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, width: '130px' }}>金额（元）</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, borderRight: '1px solid #000', width: '120px' }}>单价(元/KG)</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, width: '130px' }}>金额(元)</th>
                       </tr>
                     </thead>
                     <tbody>

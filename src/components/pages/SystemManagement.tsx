@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Pencil, Trash2, Save, Settings, Users, ShoppingCart, Truck, FileText, Download, Upload } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Save, Settings, Users, ShoppingCart, Truck, FileText, Download, Upload, GripVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { dbUsers, dbProductCategories, dbSystemSettings, dbAuditLogs, dbPurchaseOrders, dbPurchaseOrderItems, dbSalesOrders, dbSalesOrderItems, dbSuppliers, dbCustomers, dbInventory, dbInventoryLogs } from '@/lib/api';
 import * as XLSX from 'xlsx';
@@ -29,7 +29,10 @@ import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import type { User, ProductCategory, AuditLog, SystemSetting, Supplier, Customer } from '@/lib/types';
+
+const PAGE_SIZE = 10;
 
 export default function SystemManagement() {
   const { currentUser } = useAppStore();
@@ -57,7 +60,16 @@ export default function SystemManagement() {
   const [logModule, setLogModule] = useState('');
   const [logAction, setLogAction] = useState('');
 
+  const [userPage, setUserPage] = useState(1);
+  const [purchaseCatPage, setPurchaseCatPage] = useState(1);
+  const [saleCatPage, setSaleCatPage] = useState(1);
+  const [logPage, setLogPage] = useState(1);
+
   const [confirmDelete, setConfirmDelete] = useState<{ type: string; id: string } | null>(null);
+
+  // Drag state
+  const [draggedItem, setDraggedItem] = useState<ProductCategory | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<ProductCategory | null>(null);
 
   const initialLoadRef = useRef(true);
   const loadData = useCallback(async () => {
@@ -71,8 +83,8 @@ export default function SystemManagement() {
         dbCustomers.getAll(),
       ]);
       setUsers(u);
-      setPurchaseCategories(pc.filter(c => c.category === 'purchase'));
-      setSaleCategories(sc.filter(c => c.category === 'sale'));
+      setPurchaseCategories(pc.filter(c => c.category === 'purchase').sort((a, b) => a.sort - b.sort));
+      setSaleCategories(sc.filter(c => c.category === 'sale').sort((a, b) => a.sort - b.sort));
       setAuditLogs(logs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
       setSuppliers(sups);
       setCustomers(custs);
@@ -133,6 +145,57 @@ export default function SystemManagement() {
   const deleteCat = async (id: string) => { await dbProductCategories.remove(id); toast.success('分类已删除'); setConfirmDelete(null); loadData(); };
   const toggleCatStatus = async (c: ProductCategory) => { await dbProductCategories.put({ ...c, status: c.status === 'active' ? 'disabled' : 'active' }); loadData(); };
 
+  // Drag and drop handlers
+  const handleDragStart = (item: ProductCategory) => {
+    setDraggedItem(item);
+  };
+
+  const handleDragOver = (e: React.DragEvent, item: ProductCategory) => {
+    e.preventDefault();
+    setDragOverItem(item);
+  };
+
+  const handleDragEnd = async (category: 'purchase' | 'sale') => {
+    if (!draggedItem || !dragOverItem || draggedItem.id === dragOverItem.id) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+
+    const items = category === 'purchase' ? [...purchaseCategories] : [...saleCategories];
+    const draggedIndex = items.findIndex(i => i.id === draggedItem.id);
+    const overIndex = items.findIndex(i => i.id === dragOverItem.id);
+
+    if (draggedIndex === -1 || overIndex === -1) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+
+    // Reorder
+    items.splice(draggedIndex, 1);
+    items.splice(overIndex, 0, draggedItem);
+
+    // Update sort values
+    const updates = items.map((item, index) => ({ ...item, sort: index }));
+    
+    // Update local state
+    if (category === 'purchase') {
+      setPurchaseCategories(updates);
+    } else {
+      setSaleCategories(updates);
+    }
+
+    // Save to database
+    for (const item of updates) {
+      await dbProductCategories.put(item);
+    }
+
+    setDraggedItem(null);
+    setDragOverItem(null);
+    toast.success('排序已更新');
+  };
+
   const filteredLogs = auditLogs.filter(l => {
     const matchModule = !logModule || l.module.includes(logModule);
     const matchAction = !logAction || l.action.includes(logAction);
@@ -142,6 +205,42 @@ export default function SystemManagement() {
   const filteredUsers = users.filter(u => !userSearch || u.username.includes(userSearch) || u.name.includes(userSearch));
   const filteredPurchaseCats = purchaseCategories.filter(c => !catSearch || c.name.includes(catSearch));
   const filteredSaleCats = saleCategories.filter(c => !catSearch || c.name.includes(catSearch));
+
+  // Pagination
+  const userTotalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const purchaseCatTotalPages = Math.max(1, Math.ceil(filteredPurchaseCats.length / PAGE_SIZE));
+  const saleCatTotalPages = Math.max(1, Math.ceil(filteredSaleCats.length / PAGE_SIZE));
+  const logTotalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+
+  const safeUserPage = Math.min(userPage, userTotalPages);
+  const safePurchaseCatPage = Math.min(purchaseCatPage, purchaseCatTotalPages);
+  const safeSaleCatPage = Math.min(saleCatPage, saleCatTotalPages);
+  const safeLogPage = Math.min(logPage, logTotalPages);
+
+  const paginatedUsers = useMemo(() => filteredUsers.slice((safeUserPage - 1) * PAGE_SIZE, safeUserPage * PAGE_SIZE), [filteredUsers, safeUserPage]);
+  const paginatedPurchaseCats = useMemo(() => filteredPurchaseCats.slice((safePurchaseCatPage - 1) * PAGE_SIZE, safePurchaseCatPage * PAGE_SIZE), [filteredPurchaseCats, safePurchaseCatPage]);
+  const paginatedSaleCats = useMemo(() => filteredSaleCats.slice((safeSaleCatPage - 1) * PAGE_SIZE, safeSaleCatPage * PAGE_SIZE), [filteredSaleCats, safeSaleCatPage]);
+  const paginatedLogs = useMemo(() => filteredLogs.slice((safeLogPage - 1) * PAGE_SIZE, safeLogPage * PAGE_SIZE), [filteredLogs, safeLogPage]);
+
+  useEffect(() => { setUserPage(1); }, [userSearch]);
+  useEffect(() => { setPurchaseCatPage(1); setSaleCatPage(1); }, [catSearch]);
+  useEffect(() => { setLogPage(1); }, [logModule, logAction]);
+
+  const getPageNumbers = (total: number, current: number) => {
+    const pages: (number | 'ellipsis')[] = [];
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (current > 3) pages.push('ellipsis');
+      const start = Math.max(2, current - 1);
+      const end = Math.min(total - 1, current + 1);
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (current < total - 2) pages.push('ellipsis');
+      pages.push(total);
+    }
+    return pages;
+  };
 
   const parseExcelDate = (value: unknown): string => {
     if (!value) return '';
@@ -190,6 +289,10 @@ export default function SystemManagement() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      if (suppliers.length === 0) {
+        toast.error('供应商列表为空，请先添加供应商');
+        return;
+      }
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -209,6 +312,7 @@ export default function SystemManagement() {
       }
       let successCount = 0;
       let errorCount = 0;
+      const notFoundSuppliers = new Set<string>();
       const orderMap: Record<string, { items: Array<{ productName: string; spec: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -231,7 +335,11 @@ export default function SystemManagement() {
       for (const [key, orderData] of Object.entries(orderMap)) {
         const [date, supplierName] = key.split('|');
         const supplier = suppliers.find(s => s.name === supplierName);
-        if (!supplier) { errorCount += orderData.items.length; continue; }
+        if (!supplier) { 
+          errorCount += orderData.items.length; 
+          notFoundSuppliers.add(supplierName);
+          continue; 
+        }
         const totalAmount = orderData.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + orderData.freight;
         const res = await fetch(`/api/orderNo?prefix=JHD&date=${date}`);
         const { orderNo } = await res.json();
@@ -264,7 +372,12 @@ export default function SystemManagement() {
         successCount += orderData.items.length;
       }
       await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '进货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
-      toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      
+      if (notFoundSuppliers.size > 0) {
+        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。未找到供应商：${Array.from(notFoundSuppliers).join('、')}`);
+      } else {
+        toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      }
       loadData();
     } catch (err) {
       console.error(err);
@@ -277,6 +390,10 @@ export default function SystemManagement() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      if (customers.length === 0) {
+        toast.error('客户列表为空，请先添加客户');
+        return;
+      }
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -295,6 +412,7 @@ export default function SystemManagement() {
       }
       let successCount = 0;
       let errorCount = 0;
+      const notFoundCustomers = new Set<string>();
       const orderMap: Record<string, { items: Array<{ productName: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -316,7 +434,11 @@ export default function SystemManagement() {
       for (const [key, orderData] of Object.entries(orderMap)) {
         const [date, customerName] = key.split('|');
         const customer = customers.find(c => c.name === customerName);
-        if (!customer) { errorCount += orderData.items.length; continue; }
+        if (!customer) { 
+          errorCount += orderData.items.length; 
+          notFoundCustomers.add(customerName);
+          continue; 
+        }
         const totalAmount = orderData.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + orderData.freight;
         const res = await fetch(`/api/orderNo?prefix=CHD&date=${date}`);
         const { orderNo } = await res.json();
@@ -349,7 +471,12 @@ export default function SystemManagement() {
         successCount += orderData.items.length;
       }
       await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '出货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
-      toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      
+      if (notFoundCustomers.size > 0) {
+        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。未找到客户：${Array.from(notFoundCustomers).join('、')}`);
+      } else {
+        toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
+      }
       loadData();
     } catch (err) {
       console.error(err);
@@ -386,68 +513,226 @@ export default function SystemManagement() {
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="搜索用户名或姓名..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="pl-9" /></div>
-            <Button onClick={openNewUser} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增用户</Button>
+          <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="搜索用户名或姓名..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Button onClick={openNewUser} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增用户</Button>
+            </div>
           </div>
-          <Card className="border-gray-200"><CardContent className="p-0">
-            <div className="overflow-x-auto"><Table>
-              <TableHeader><TableRow><TableHead>用户名</TableHead><TableHead>姓名</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead>最后登录</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
-              <TableBody>{filteredUsers.map(u => (
-                <TableRow key={u.id}>
-                  <TableCell className="font-mono text-xs">{u.username}</TableCell>
-                  <TableCell>{u.name}</TableCell>
-                  <TableCell><Badge variant="secondary" className="bg-gray-100">{USER_ROLES.find(r => r.value === u.role)?.label || u.role}</Badge></TableCell>
-                  <TableCell>
-                    <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{formatDateTime(u.lastLoginAt || '')}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-0.5">
-                      <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditUser(u)} />
-                      {u.id !== currentUser?.id && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'user', id: u.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table></div>
-          </CardContent></Card>
+
+          <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
+            {filteredUsers.length === 0 ? <EmptyState title="暂无用户" /> : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>用户名</TableHead>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>角色</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>最后登录</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {paginatedUsers.map(u => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-mono text-xs">{u.username}</TableCell>
+                        <TableCell>{u.name}</TableCell>
+                        <TableCell><Badge variant="secondary" className="bg-gray-100">{USER_ROLES.find(r => r.value === u.role)?.label || u.role}</Badge></TableCell>
+                        <TableCell>
+                          <Switch checked={u.status === 'active'} onCheckedChange={() => toggleUserStatus(u)} disabled={u.id === currentUser?.id} />
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{formatDateTime(u.lastLoginAt || '')}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditUser(u)} />
+                            {u.id !== currentUser?.id && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'user', id: u.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {filteredUsers.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">共 {filteredUsers.length} 条，第 {safeUserPage}/{userTotalPages} 页</span>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious onClick={() => setUserPage(p => Math.max(1, p - 1))} className={safeUserPage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                  {getPageNumbers(userTotalPages, safeUserPage).map((p, idx) => (
+                    <PaginationItem key={idx}>
+                      {p === 'ellipsis' ? <span className="px-2 text-muted-foreground">...</span> : (
+                        <PaginationLink onClick={() => setUserPage(p)} isActive={p === safeUserPage} className="cursor-pointer">{p}</PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext onClick={() => setUserPage(p => Math.min(userTotalPages, p + 1))} className={safeUserPage >= userTotalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="purchaseCats" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="搜索分类名..." value={catSearch} onChange={e => setCatSearch(e.target.value)} className="pl-9" /></div>
-            <Button onClick={() => openNewCat('purchase')} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增分类</Button>
+          <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="搜索分类名..." value={catSearch} onChange={e => setCatSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Button onClick={() => openNewCat('purchase')} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增分类</Button>
+            </div>
           </div>
-          <Card className="border-gray-200"><CardContent className="p-0">
-            <div className="overflow-x-auto"><Table>
-              <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>规格</TableHead><TableHead>排序</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
-              <TableBody>{filteredPurchaseCats.map(c => (
-                <TableRow key={c.id}><TableCell>{c.name}</TableCell><TableCell>{c.spec}</TableCell><TableCell>{c.sort}</TableCell>
-                  <TableCell><Switch checked={c.status === 'active'} onCheckedChange={() => toggleCatStatus(c)} /></TableCell>
-                  <TableCell className="text-right"><div className="flex items-center justify-end gap-0.5"><IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditCat(c)} /><IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'cat', id: c.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" /></div></TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table></div>
-          </CardContent></Card>
+
+          <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
+            {filteredPurchaseCats.length === 0 ? <EmptyState title="暂无分类" /> : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>名称</TableHead>
+                    <TableHead>规格</TableHead>
+                    <TableHead>排序</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {paginatedPurchaseCats.map(c => (
+                      <TableRow 
+                        key={c.id} 
+                        draggable
+                        onDragStart={() => handleDragStart(c)}
+                        onDragOver={(e) => handleDragOver(e, c)}
+                        onDragEnd={() => handleDragEnd('purchase')}
+                        className={dragOverItem?.id === c.id ? 'bg-blue-50' : 'cursor-grab active:cursor-grabbing'}
+                      >
+                        <TableCell><GripVertical className="h-4 w-4 text-muted-foreground" /></TableCell>
+                        <TableCell>{c.name}</TableCell>
+                        <TableCell>{c.spec}</TableCell>
+                        <TableCell>{c.sort}</TableCell>
+                        <TableCell><Switch checked={c.status === 'active'} onCheckedChange={() => toggleCatStatus(c)} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditCat(c)} />
+                            <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'cat', id: c.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {filteredPurchaseCats.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">共 {filteredPurchaseCats.length} 条，第 {safePurchaseCatPage}/{purchaseCatTotalPages} 页</span>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious onClick={() => setPurchaseCatPage(p => Math.max(1, p - 1))} className={safePurchaseCatPage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                  {getPageNumbers(purchaseCatTotalPages, safePurchaseCatPage).map((p, idx) => (
+                    <PaginationItem key={idx}>
+                      {p === 'ellipsis' ? <span className="px-2 text-muted-foreground">...</span> : (
+                        <PaginationLink onClick={() => setPurchaseCatPage(p)} isActive={p === safePurchaseCatPage} className="cursor-pointer">{p}</PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext onClick={() => setPurchaseCatPage(p => Math.min(purchaseCatTotalPages, p + 1))} className={safePurchaseCatPage >= purchaseCatTotalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="saleCats" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="搜索分类名..." value={catSearch} onChange={e => setCatSearch(e.target.value)} className="pl-9" /></div>
-            <Button onClick={() => openNewCat('sale')} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增分类</Button>
+          <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="搜索分类名..." value={catSearch} onChange={e => setCatSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Button onClick={() => openNewCat('sale')} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增分类</Button>
+            </div>
           </div>
-          <Card className="border-gray-200"><CardContent className="p-0">
-            <div className="overflow-x-auto"><Table>
-              <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>规格</TableHead><TableHead>排序</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
-              <TableBody>{filteredSaleCats.map(c => (
-                <TableRow key={c.id}><TableCell>{c.name}</TableCell><TableCell>{c.spec}</TableCell><TableCell>{c.sort}</TableCell>
-                  <TableCell><Switch checked={c.status === 'active'} onCheckedChange={() => toggleCatStatus(c)} /></TableCell>
-                  <TableCell className="text-right"><div className="flex items-center justify-end gap-0.5"><IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditCat(c)} /><IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'cat', id: c.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" /></div></TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table></div>
-          </CardContent></Card>
+
+          <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
+            {filteredSaleCats.length === 0 ? <EmptyState title="暂无分类" /> : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead>名称</TableHead>
+                    <TableHead>规格</TableHead>
+                    <TableHead>排序</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {paginatedSaleCats.map(c => (
+                      <TableRow 
+                        key={c.id} 
+                        draggable
+                        onDragStart={() => handleDragStart(c)}
+                        onDragOver={(e) => handleDragOver(e, c)}
+                        onDragEnd={() => handleDragEnd('sale')}
+                        className={dragOverItem?.id === c.id ? 'bg-blue-50' : 'cursor-grab active:cursor-grabbing'}
+                      >
+                        <TableCell><GripVertical className="h-4 w-4 text-muted-foreground" /></TableCell>
+                        <TableCell>{c.name}</TableCell>
+                        <TableCell>{c.spec}</TableCell>
+                        <TableCell>{c.sort}</TableCell>
+                        <TableCell><Switch checked={c.status === 'active'} onCheckedChange={() => toggleCatStatus(c)} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditCat(c)} />
+                            <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete({ type: 'cat', id: c.id })} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {filteredSaleCats.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">共 {filteredSaleCats.length} 条，第 {safeSaleCatPage}/{saleCatTotalPages} 页</span>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious onClick={() => setSaleCatPage(p => Math.max(1, p - 1))} className={safeSaleCatPage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                  {getPageNumbers(saleCatTotalPages, safeSaleCatPage).map((p, idx) => (
+                    <PaginationItem key={idx}>
+                      {p === 'ellipsis' ? <span className="px-2 text-muted-foreground">...</span> : (
+                        <PaginationLink onClick={() => setSaleCatPage(p)} isActive={p === safeSaleCatPage} className="cursor-pointer">{p}</PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext onClick={() => setSaleCatPage(p => Math.min(saleCatTotalPages, p + 1))} className={safeSaleCatPage >= saleCatTotalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="import" className="space-y-4">
@@ -494,19 +779,68 @@ export default function SystemManagement() {
         </TabsContent>
 
         <TabsContent value="logs" className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[150px] max-w-xs"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="模块" value={logModule} onChange={e => setLogModule(e.target.value)} className="pl-9" /></div>
-            <div className="relative flex-1 min-w-[150px] max-w-xs"><Input placeholder="操作" value={logAction} onChange={e => setLogAction(e.target.value)} /></div>
-            <Button variant="outline" size="sm" onClick={() => { setLogModule(''); setLogAction(''); }}>重置</Button>
+          <div className="rounded-lg border border-gray-200 bg-background px-3 py-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[150px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="模块" value={logModule} onChange={e => setLogModule(e.target.value)} className="pl-9" />
+              </div>
+              <div className="relative flex-1 min-w-[150px]">
+                <Input placeholder="操作" value={logAction} onChange={e => setLogAction(e.target.value)} />
+              </div>
+              <Button variant="outline" size="sm" onClick={() => { setLogModule(''); setLogAction(''); setLogPage(1); }}>重置</Button>
+            </div>
           </div>
-          <Card className="border-gray-200"><CardContent className="p-0">
-            <div className="overflow-x-auto"><Table>
-              <TableHeader><TableRow><TableHead>时间</TableHead><TableHead>操作人</TableHead><TableHead>模块</TableHead><TableHead>操作</TableHead><TableHead>详情</TableHead></TableRow></TableHeader>
-              <TableBody>{filteredLogs.slice(0, 100).map(l => (
-                <TableRow key={l.id}><TableCell className="text-xs whitespace-nowrap">{formatDateTime(l.createdAt || '')}</TableCell><TableCell>{l.operator}</TableCell><TableCell><Badge variant="secondary" className="bg-gray-100">{l.module}</Badge></TableCell><TableCell>{l.action}</TableCell><TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.detail}</TableCell></TableRow>
-              ))}</TableBody>
-            </Table></div>
-          </CardContent></Card>
+
+          <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
+            {filteredLogs.length === 0 ? <EmptyState title="暂无日志" /> : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>时间</TableHead>
+                    <TableHead>操作人</TableHead>
+                    <TableHead>模块</TableHead>
+                    <TableHead>操作</TableHead>
+                    <TableHead>详情</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {paginatedLogs.map(l => (
+                      <TableRow key={l.id}>
+                        <TableCell className="text-xs whitespace-nowrap">{formatDateTime(l.createdAt || '')}</TableCell>
+                        <TableCell>{l.operator}</TableCell>
+                        <TableCell><Badge variant="secondary" className="bg-gray-100">{l.module}</Badge></TableCell>
+                        <TableCell>{l.action}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.detail}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          {filteredLogs.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">共 {filteredLogs.length} 条，第 {safeLogPage}/{logTotalPages} 页</span>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious onClick={() => setLogPage(p => Math.max(1, p - 1))} className={safeLogPage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                  {getPageNumbers(logTotalPages, safeLogPage).map((p, idx) => (
+                    <PaginationItem key={idx}>
+                      {p === 'ellipsis' ? <span className="px-2 text-muted-foreground">...</span> : (
+                        <PaginationLink onClick={() => setLogPage(p)} isActive={p === safeLogPage} className="cursor-pointer">{p}</PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext onClick={() => setLogPage(p => Math.min(logTotalPages, p + 1))} className={safeLogPage >= logTotalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

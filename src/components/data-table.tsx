@@ -9,7 +9,8 @@ import {
   IconCircleCheckFilled,
   IconLoader,
   IconLayoutColumns,
-  IconDotsVertical,
+  IconCalendar,
+  IconX,
 } from '@tabler/icons-react';
 import {
   flexRender,
@@ -23,7 +24,8 @@ import {
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table';
-import { z } from 'zod';
+import { format as dateFnsFormat, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,6 +58,8 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { formatDate, formatMoney } from '@/lib/format';
 import { PAYMENT_STATUSES, PRODUCTION_STATUSES } from '@/lib/constants';
 
@@ -169,8 +173,45 @@ function TabTable({ orders, type }: { orders: UnifiedOrder[]; type: 'purchase' |
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 });
 
+  // Date filter state
+  const [dateFrom, setDateFrom] = React.useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = React.useState<Date | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = React.useState<string>('all');
+
+  const setQuickRange = (rangeType: 'week' | 'month' | 'year') => {
+    const now = new Date();
+    if (rangeType === 'week') {
+      setDateFrom(startOfWeek(now, { weekStartsOn: 1 }));
+      setDateTo(endOfWeek(now, { weekStartsOn: 1 }));
+    } else if (rangeType === 'month') {
+      setDateFrom(startOfMonth(now));
+      setDateTo(endOfMonth(now));
+    } else {
+      setDateFrom(startOfYear(now));
+      setDateTo(endOfYear(now));
+    }
+  };
+
+  const clearDateFilter = () => {
+    setDateFrom(undefined);
+    setDateTo(undefined);
+  };
+
+  const dateFromStr = dateFrom ? dateFnsFormat(dateFrom, 'yyyy-MM-dd') : '';
+  const dateToStr = dateTo ? dateFnsFormat(dateTo, 'yyyy-MM-dd') : '';
+
+  // Filter data
+  const filteredData = React.useMemo(() => {
+    return orders.filter(order => {
+      const matchDateFrom = !dateFromStr || order.date >= dateFromStr;
+      const matchDateTo = !dateToStr || order.date <= dateToStr;
+      const matchStatus = statusFilter === 'all' || order.status === statusFilter;
+      return matchDateFrom && matchDateTo && matchStatus;
+    });
+  }, [orders, dateFromStr, dateToStr, statusFilter]);
+
   const table = useReactTable({
-    data: orders,
+    data: filteredData,
     columns,
     state: { sorting, columnVisibility, rowSelection, columnFilters, pagination },
     getRowId: (row) => row.id,
@@ -186,16 +227,96 @@ function TabTable({ orders, type }: { orders: UnifiedOrder[]; type: 'purchase' |
     getSortedRowModel: getSortedRowModel(),
   });
 
+  const statusOptions = type === 'production' ? PRODUCTION_STATUSES : PAYMENT_STATUSES;
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Column visibility control */}
-      <div className="flex items-center justify-end px-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Left side - Date filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5 h-8">
+              <IconCalendar className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {dateFrom || dateTo ? (
+                  dateFrom && dateTo ? (
+                    <>
+                      {dateFnsFormat(dateFrom, 'MM/dd')} - {dateFnsFormat(dateTo, 'MM/dd')}
+                    </>
+                  ) : dateFrom ? (
+                    <>从 {dateFnsFormat(dateFrom, 'MM/dd')}</>
+                  ) : (
+                    <>至 {dateFnsFormat(dateTo!, 'MM/dd')}</>
+                  )
+                ) : (
+                  '日期筛选'
+                )}
+              </span>
+              <span className="sm:hidden">日期</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <div className="p-3 border-b">
+              <div className="flex gap-2 mb-2">
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('week')} className="h-7 text-xs">本周</Button>
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('month')} className="h-7 text-xs">本月</Button>
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('year')} className="h-7 text-xs">本年</Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar
+                  mode="single"
+                  selected={dateFrom}
+                  onSelect={setDateFrom}
+                  defaultMonth={dateFrom}
+                  locale={zhCN}
+                />
+                <Calendar
+                  mode="single"
+                  selected={dateTo}
+                  onSelect={setDateTo}
+                  defaultMonth={dateTo || dateFrom}
+                  locale={zhCN}
+                />
+              </div>
+            </div>
+            <div className="p-2 flex justify-end">
+              <Button variant="ghost" size="sm" onClick={clearDateFilter} className="h-7 text-xs">清除</Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Status filter */}
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger size="sm" className="w-[100px] h-8 pr-8">
+            <SelectValue placeholder="状态" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部状态</SelectItem>
+            {statusOptions.map((s: { value: string; label: string }) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Clear filters */}
+        {(dateFrom || dateTo || statusFilter !== 'all') && (
+          <Button variant="ghost" size="sm" onClick={() => { clearDateFilter(); setStatusFilter('all'); }} className="h-8 px-2">
+            <IconX className="h-3.5 w-3.5 mr-1" />
+            清除筛选
+          </Button>
+        )}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Right side - Column visibility control */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <IconLayoutColumns />
-              <span className="hidden lg:inline">自定义列</span>
-              <span className="lg:hidden">列</span>
+            <Button variant="outline" size="sm" className="h-8">
+              <IconLayoutColumns className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline ml-1">自定义列</span>
+              <span className="lg:hidden ml-1">列</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">

@@ -50,6 +50,18 @@ const config: Config = {
   				'3': 'hsl(var(--chart-3))',
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
+  			},
+  			gold: {
+  				'50': '#FFF9E6',
+  				'100': '#FFF0BF',
+  				'200': '#FFE699',
+  				'300': '#E8D48B',
+  				'400': '#D4AF37',
+  				'500': '#C9A84C',
+  				'600': '#B8962E',
+  				'700': '#8B7225',
+  				'800': '#5E4D19',
+  				'900': '#31290D',
   			}
   		},
   		borderRadius: {

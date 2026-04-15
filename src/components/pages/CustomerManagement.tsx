@@ -287,20 +287,37 @@ export default function CustomerManagement() {
           </InfoSection>
 
           {recentOrders.length > 0 && (
-            <InfoSection title="最近出货单">
-              <DetailTable
-                columns={[
-                  { key: 'orderNo', label: '单号' },
-                  { key: 'date', label: '日期' },
-                  { key: 'amount', label: '金额', align: 'right' },
-                ]}
-                data={recentOrders.slice(0, 5).map(o => ({
-                  orderNo: <span className="font-mono text-xs">{o.orderNo}</span>,
-                  date: formatDate(o.date),
-                  amount: formatMoney(o.totalAmount),
-                }))}
-              />
-            </InfoSection>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="h-1 w-1 rounded-full bg-foreground" />
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  最近出货单
+                </h4>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {recentOrders.length} 条
+                </span>
+              </div>
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/40 border-b">
+                      <th className="text-left py-2 px-3 font-medium">单号</th>
+                      <th className="text-left py-2 px-3 font-medium">日期</th>
+                      <th className="text-right py-2 px-3 font-medium">金额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentOrders.slice(0, 5).map(o => (
+                      <tr key={o.id} className="border-b last:border-b-0">
+                        <td className="py-2 px-3 font-mono">{o.orderNo}</td>
+                        <td className="py-2 px-3">{formatDate(o.date)}</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums">{formatMoney(o.totalAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </>)}
       </DetailSheet>

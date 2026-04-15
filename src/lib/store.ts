@@ -24,8 +24,8 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   isAuthenticated: false,
   currentUser: null,
-  login: (user) => set({ isAuthenticated: true, currentUser: user, showWelcome: false }),
-  logout: () => set({ isAuthenticated: false, currentUser: null, showWelcome: true }),
+  login: (user) => set({ isAuthenticated: true, currentUser: user }),
+  logout: () => set({ isAuthenticated: false, currentUser: null }),
 
   activeModule: 'dashboard',
   setActiveModule: (module) => set({ activeModule: module }),
