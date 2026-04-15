@@ -93,9 +93,9 @@ function PriceChart({
                   stopOpacity={0.3}
                 />
                 <stop
-                  offset="95%"
+                  offset="100%"
                   stopColor="var(--color-avgPrice)"
-                  stopOpacity={0.02}
+                  stopOpacity={0}
                 />
               </linearGradient>
             </defs>
@@ -105,17 +105,15 @@ function PriceChart({
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              fontSize={12}
+              tickFormatter={(value) => value}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              fontSize={12}
-              tickFormatter={(val: number) => `${(val / 1000).toFixed(1)}k`}
+              tickFormatter={(value) => `¥${value}`}
             />
             <ChartTooltip
-              cursor={false}
               content={
                 <ChartTooltipContent
                   formatter={(value: number) => [
