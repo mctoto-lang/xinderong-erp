@@ -315,12 +315,19 @@ export default function ChartAnalysis() {
           <Card><CardHeader className="pb-2"><CardTitle className="text-sm">进货均价 (元/KG)</CardTitle><CardDescription className="text-xs">各产品平均进货单价</CardDescription></CardHeader>
             <CardContent>{poAvgPriceData.length === 0 ? <EmptyState title="暂无数据" /> : (
               <ChartContainer config={poAvgPriceConfig} className="h-[250px] w-full">
-                <BarChart accessibilityLayer data={poAvgPriceData} layout="vertical">
+                <BarChart accessibilityLayer data={poAvgPriceData} layout="vertical" margin={{ left: 20, right: 40 }}>
                   <CartesianGrid horizontal={false} />
                   <XAxis type="number" tickFormatter={v => `¥${v}`} />
-                  <YAxis type="category" dataKey="name" width={80} tickLine={false} />
-                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  <Bar dataKey="avgPrice" fill="#93c5fd" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    width={120} 
+                    tickLine={false} 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value, name, item) => [`¥${Number(value).toFixed(2)}/KG`, item.payload.name]} />} />
+                  <Bar dataKey="avgPrice" fill="#93c5fd" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `¥${v.toFixed(2)}` }} />
                 </BarChart>
               </ChartContainer>
             )}</CardContent>
@@ -404,12 +411,19 @@ export default function ChartAnalysis() {
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">货品出货金额排行</CardTitle><CardDescription className="text-xs">按产品金额从高到低</CardDescription></CardHeader>
               <CardContent>{soAmountRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
                 <ChartContainer config={soAmountConfig} className="h-[250px] w-full">
-                  <BarChart accessibilityLayer data={soAmountRankData} layout="vertical">
+                  <BarChart accessibilityLayer data={soAmountRankData} layout="vertical" margin={{ left: 20, right: 40 }}>
                     <CartesianGrid horizontal={false} />
                     <XAxis type="number" tickFormatter={v => `¥${(v / 1000).toFixed(0)}k`} />
-                    <YAxis type="category" dataKey="name" width={80} tickLine={false} />
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="amount" fill="#6ee7b7" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      width={120} 
+                      tickLine={false} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value) => [`¥${Number(value).toLocaleString('zh-CN')}`, '金额']} />} />
+                    <Bar dataKey="amount" fill="#6ee7b7" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `¥${(v / 1000).toFixed(0)}k` }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>
@@ -418,12 +432,19 @@ export default function ChartAnalysis() {
             <Card><CardHeader className="pb-2"><CardTitle className="text-sm">货品出货重量排行</CardTitle><CardDescription className="text-xs">按产品重量从高到低</CardDescription></CardHeader>
               <CardContent>{soWeightRankData.length === 0 ? <EmptyState title="暂无数据" /> : (
                 <ChartContainer config={soWeightConfig} className="h-[250px] w-full">
-                  <BarChart accessibilityLayer data={soWeightRankData} layout="vertical">
+                  <BarChart accessibilityLayer data={soWeightRankData} layout="vertical" margin={{ left: 20, right: 40 }}>
                     <CartesianGrid horizontal={false} />
                     <XAxis type="number" tickFormatter={v => `${v}KG`} />
-                    <YAxis type="category" dataKey="name" width={80} tickLine={false} />
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                    <Bar dataKey="weight" fill="#fcd34d" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11 }} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      width={120} 
+                      tickLine={false} 
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
+                    />
+                    <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value) => [`${Number(value).toLocaleString('zh-CN')} KG`, '重量']} />} />
+                    <Bar dataKey="weight" fill="#fcd34d" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `${v}KG` }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>

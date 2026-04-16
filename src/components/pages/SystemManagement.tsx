@@ -313,6 +313,7 @@ export default function SystemManagement() {
       let successCount = 0;
       let errorCount = 0;
       const notFoundSuppliers = new Set<string>();
+      const parseErrors: string[] = [];
       const orderMap: Record<string, { items: Array<{ productName: string; spec: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -325,13 +326,19 @@ export default function SystemManagement() {
         const unitPrice = Number(row[priceIdx]) || 0;
         const freight = Number(row[freightIdx]) || 0;
         const remark = String(row[remarkIdx] || '').trim();
-        if (!supplierName || !date) { errorCount++; continue; }
+        if (!supplierName || !date) { 
+          errorCount++; 
+          parseErrors.push(`第${i + 1}行: 供应商或日期为空`);
+          continue; 
+        }
         const key = `${date}|${supplierName}`;
         if (!orderMap[key]) orderMap[key] = { items: [], freight: 0, remark: '' };
         orderMap[key].items.push({ productName, spec, weight, unitPrice });
         orderMap[key].freight = Math.max(orderMap[key].freight, freight);
         orderMap[key].remark = remark || orderMap[key].remark;
       }
+      const allInventory = await dbInventory.getAll();
+      const inventoryMap = new Map(allInventory.map(inv => [inv.productName, inv]));
       for (const [key, orderData] of Object.entries(orderMap)) {
         const [date, supplierName] = key.split('|');
         const supplier = suppliers.find(s => s.name === supplierName);
@@ -341,8 +348,15 @@ export default function SystemManagement() {
           continue; 
         }
         const totalAmount = orderData.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + orderData.freight;
-        const res = await fetch(`/api/orderNo?prefix=JHD&date=${date}`);
-        const { orderNo } = await res.json();
+        const orderNoRes = await fetch(`/api/orderNo?prefix=JHD&date=${date}`);
+        if (!orderNoRes.ok) {
+          const errData = await orderNoRes.json().catch(() => ({}));
+          throw new Error(`生成订单号失败: ${errData.error || orderNoRes.status}`);
+        }
+        const { orderNo } = await orderNoRes.json();
+        if (!orderNo) {
+          throw new Error('生成订单号失败: 返回值为空');
+        }
         const order = await dbPurchaseOrders.add({
           orderNo, date, supplierId: supplier.id, supplierName: supplier.name,
           totalAmount, freight: orderData.freight, paidAmount: 0, unpaidAmount: totalAmount,
@@ -353,16 +367,18 @@ export default function SystemManagement() {
           spec: item.spec, weight: item.weight, unitPrice: item.unitPrice, amount: item.weight * item.unitPrice,
         })));
         for (const item of orderData.items) {
-          const allInv = await dbInventory.getAll();
-          let inv = allInv.find(i => i.productName === item.productName);
+          let inv = inventoryMap.get(item.productName);
           if (!inv) {
             inv = await dbInventory.add({
               productName: item.productName, category: '原料', rawMaterialStock: 0,
               finishedProductStock: 0, warningThreshold: 100, status: 'normal',
             });
+            inventoryMap.set(item.productName, inv);
           }
           const newRaw = inv.rawMaterialStock + item.weight;
-          await dbInventory.put({ ...inv, rawMaterialStock: newRaw });
+          const updatedInv = { ...inv, rawMaterialStock: newRaw };
+          await dbInventory.put(updatedInv);
+          inventoryMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: inv.id, productName: item.productName, logType: '批量导入',
             relatedOrderNo: orderNo, quantity: item.weight, balance: newRaw,
@@ -373,15 +389,25 @@ export default function SystemManagement() {
       }
       await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '进货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
       
-      if (notFoundSuppliers.size > 0) {
-        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。未找到供应商：${Array.from(notFoundSuppliers).join('、')}`);
+      if (notFoundSuppliers.size > 0 || parseErrors.length > 0) {
+        const messages: string[] = [];
+        if (notFoundSuppliers.size > 0) {
+          messages.push(`未找到供应商：${Array.from(notFoundSuppliers).join('、')}`);
+        }
+        if (parseErrors.length > 0 && parseErrors.length <= 5) {
+          messages.push(`解析错误：${parseErrors.join('；')}`);
+        } else if (parseErrors.length > 5) {
+          messages.push(`解析错误：${parseErrors.slice(0, 5).join('；')}...等${parseErrors.length}条`);
+        }
+        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。${messages.join('。')}`);
       } else {
         toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
       }
       loadData();
     } catch (err) {
       console.error(err);
-      toast.error('导入失败，请检查文件格式');
+      const message = err instanceof Error ? err.message : '请检查文件格式';
+      toast.error(`导入失败：${message}`);
     }
     e.target.value = '';
   };

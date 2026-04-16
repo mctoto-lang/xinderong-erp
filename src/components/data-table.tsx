@@ -288,7 +288,7 @@ function TabTable({ orders, type }: { orders: UnifiedOrder[]; type: 'purchase' |
 
         {/* Status filter */}
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger size="sm" className="w-[100px] h-8 pr-8">
+          <SelectTrigger size="sm" className="w-[120px] h-8">
             <SelectValue placeholder="状态" />
           </SelectTrigger>
           <SelectContent>

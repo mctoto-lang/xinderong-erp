@@ -266,12 +266,15 @@ export default function PurchaseManagement() {
 
     if (editingOrder) {
       const oldItems = await dbPurchaseOrderItems.getByOrderId(editingOrder.id);
+      const allInvForRollback = await dbInventory.getAll();
+      const invRollbackMap = new Map(allInvForRollback.map(inv => [inv.productName, inv]));
       for (const oldItem of oldItems) {
-        const allInv = await dbInventory.getAll();
-        const inv = allInv.find(i => i.productName === oldItem.productName);
+        const inv = invRollbackMap.get(oldItem.productName);
         if (inv) {
           const newRaw = Math.max(0, inv.rawMaterialStock - oldItem.weight);
-          await dbInventory.put({ ...inv, rawMaterialStock: newRaw });
+          const updatedInv = { ...inv, rawMaterialStock: newRaw };
+          await dbInventory.put(updatedInv);
+          invRollbackMap.set(oldItem.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: inv.id,
             productName: oldItem.productName,
@@ -294,7 +297,7 @@ export default function PurchaseManagement() {
       totalAmount,
       freight: orderForm.freight,
       paidAmount: editingOrder?.paidAmount || 0,
-      unpaidAmount: totalAmount - (editingOrder?.paidAmount || 0),
+      unpaidAmount: Math.max(0, totalAmount - (editingOrder?.paidAmount || 0)),
       paymentStatus: (editingOrder?.paidAmount || 0) >= totalAmount ? 'paid' : (editingOrder?.paidAmount || 0) > 0 ? 'partial' : 'unpaid',
       remark: orderForm.remark,
       createdBy: currentUser?.name || '',
@@ -322,9 +325,10 @@ export default function PurchaseManagement() {
       }))
     );
 
+    const allInvForAdd = await dbInventory.getAll();
+    const invAddMap = new Map(allInvForAdd.map(inv => [inv.productName, inv]));
     for (const item of validItems) {
-      const allInv = await dbInventory.getAll();
-      let inv = allInv.find(i => i.productName === item.productName);
+      let inv = invAddMap.get(item.productName);
       if (!inv) {
         inv = await dbInventory.add({
           productName: item.productName,
@@ -334,10 +338,13 @@ export default function PurchaseManagement() {
           warningThreshold: 100,
           status: 'normal',
         });
+        invAddMap.set(item.productName, inv);
       }
       const newRaw = inv.rawMaterialStock + item.weight;
       const isWarning = newRaw < inv.warningThreshold;
-      await dbInventory.put({ ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' });
+      const updatedInv = { ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' as const };
+      await dbInventory.put(updatedInv);
+      invAddMap.set(item.productName, updatedInv);
       await dbInventoryLogs.add({
         inventoryId: inv.id,
         productName: item.productName,
@@ -367,15 +374,17 @@ export default function PurchaseManagement() {
     const order = orders.find(o => o.id === id);
     if (!order) return;
 
-    // Remove inventory
     const items = await dbPurchaseOrderItems.getByOrderId(id);
+    const allInvForDelete = await dbInventory.getAll();
+    const invDeleteMap = new Map(allInvForDelete.map(inv => [inv.productName, inv]));
     for (const item of items) {
-      const allInv = await dbInventory.getAll();
-      const inv = allInv.find(i => i.productName === item.productName);
+      const inv = invDeleteMap.get(item.productName);
       if (inv) {
         const newRaw = Math.max(0, inv.rawMaterialStock - item.weight);
         const isWarning = newRaw < inv.warningThreshold;
-        await dbInventory.put({ ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' });
+        const updatedInv = { ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' as const };
+        await dbInventory.put(updatedInv);
+        invDeleteMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
           inventoryId: inv.id,
           productName: item.productName,

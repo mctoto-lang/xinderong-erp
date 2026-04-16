@@ -11,6 +11,10 @@ import {
   dbPurchaseOrders, dbSalesOrders, dbProductionOrders,
   dbPurchaseOrderItems, dbSalesOrderItems,
 } from '@/lib/api';
+import type {
+  PurchaseOrder, SalesOrder, ProductionOrder,
+  PurchaseOrderItem, SalesOrderItem,
+} from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -26,6 +30,11 @@ interface KpiData {
 interface ChartDataItem {
   month: string;
   avgPrice: number;
+}
+
+interface ProductPriceData {
+  productName: string;
+  chartData: ChartDataItem[];
 }
 
 // ─── Demo Data ────────────────────────────────────────────────
@@ -60,31 +69,43 @@ export default function Dashboard() {
   const [productionOrders, setProductionOrders] = useState<UnifiedOrder[]>([]);
   const [purchaseChartData, setPurchaseChartData] = useState<ChartDataItem[]>([]);
   const [salesChartData, setSalesChartData] = useState<ChartDataItem[]>([]);
+  const [purchaseProductPrices, setPurchaseProductPrices] = useState<ProductPriceData[]>([]);
+  const [salesProductPrices, setSalesProductPrices] = useState<ProductPriceData[]>([]);
   const [isPurchaseChartDemo, setIsPurchaseChartDemo] = useState(false);
   const [isSalesChartDemo, setIsSalesChartDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const initialLoadRef = useRef(true);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (signal?.aborted) return;
     try {
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-      const [
-        allPurchaseOrders,
-        allSalesOrders,
-        allProductionOrders,
-        allPurchaseItems,
-        allSalesItems,
-      ] = await Promise.all([
-        dbPurchaseOrders.getAll(),
-        dbSalesOrders.getAll(),
-        dbProductionOrders.getAll(),
-        dbPurchaseOrderItems.getAll(),
-        dbSalesOrderItems.getAll(),
+      const results = await Promise.allSettled([
+        dbPurchaseOrders.getAll(signal),
+        dbSalesOrders.getAll(signal),
+        dbProductionOrders.getAll(signal),
+        dbPurchaseOrderItems.getAll(signal),
+        dbSalesOrderItems.getAll(signal),
       ]);
+
+      if (signal?.aborted) return;
+
+      const rejected = results.find(r => r.status === 'rejected');
+      if (rejected && rejected.status === 'rejected') {
+        const err = rejected.reason;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        throw err;
+      }
+
+      const [allPurchaseOrders, allSalesOrders, allProductionOrders, allPurchaseItems, allSalesItems] = 
+        results.map(r => r.status === 'fulfilled' ? r.value : []) as [
+          PurchaseOrder[], SalesOrder[], ProductionOrder[],
+          PurchaseOrderItem[], SalesOrderItem[]
+        ];
 
       // ─── KPI Calculations ────────────────────────────────
       const currentMonthPurchaseItems = allPurchaseItems.filter(item => {
@@ -210,6 +231,38 @@ export default function Dashboard() {
         setIsPurchaseChartDemo(true);
       }
 
+      const purchaseProductMap = new Map<string, Map<string, { totalPrice: number; totalWeight: number }>>();
+      allPurchaseItems.forEach(item => {
+        if (item.weight > 0 && item.productName) {
+          const order = allPurchaseOrders.find(o => o.id === item.orderId);
+          if (order) {
+            const monthKey = order.date.substring(0, 7);
+            if (!purchaseProductMap.has(item.productName)) {
+              purchaseProductMap.set(item.productName, new Map());
+            }
+            const productMonthMap = purchaseProductMap.get(item.productName)!;
+            const existing = productMonthMap.get(monthKey) || { totalPrice: 0, totalWeight: 0 };
+            existing.totalPrice += item.amount;
+            existing.totalWeight += item.weight;
+            productMonthMap.set(monthKey, existing);
+          }
+        }
+      });
+
+      const purchaseProductPricesData: ProductPriceData[] = Array.from(purchaseProductMap.entries())
+        .map(([productName, monthMap]) => {
+          const sortedMonths = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+          return {
+            productName,
+            chartData: sortedMonths.map(([month, { totalPrice, totalWeight }]) => ({
+              month: `${parseInt(month.split('-')[1])}月`,
+              avgPrice: totalWeight > 0 ? Math.round(totalPrice / totalWeight) : 0,
+            })),
+          };
+        })
+        .sort((a, b) => a.productName.localeCompare(b.productName, 'zh-CN'));
+      setPurchaseProductPrices(purchaseProductPricesData);
+
       const salesPriceByMonth = new Map<string, { totalPrice: number; totalWeight: number }>();
       allSalesItems.forEach(item => {
         if (item.weight > 0) {
@@ -237,6 +290,41 @@ export default function Dashboard() {
         setSalesChartData(generateSalesDemoChartData());
         setIsSalesChartDemo(true);
       }
+
+      const salesProductMap = new Map<string, Map<string, { totalPrice: number; totalWeight: number }>>();
+      allSalesItems.forEach(item => {
+        if (item.weight > 0 && item.productName) {
+          const order = allSalesOrders.find(o => o.id === item.orderId);
+          if (order) {
+            const monthKey = order.date.substring(0, 7);
+            if (!salesProductMap.has(item.productName)) {
+              salesProductMap.set(item.productName, new Map());
+            }
+            const productMonthMap = salesProductMap.get(item.productName)!;
+            const existing = productMonthMap.get(monthKey) || { totalPrice: 0, totalWeight: 0 };
+            existing.totalPrice += item.amount;
+            existing.totalWeight += item.weight;
+            productMonthMap.set(monthKey, existing);
+          }
+        }
+      });
+
+      const salesProductPricesData: ProductPriceData[] = Array.from(salesProductMap.entries())
+        .map(([productName, monthMap]) => {
+          const sortedMonths = Array.from(monthMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+          return {
+            productName,
+            chartData: sortedMonths.map(([month, { totalPrice, totalWeight }]) => ({
+              month: `${parseInt(month.split('-')[1])}月`,
+              avgPrice: totalWeight > 0 ? Math.round(totalPrice / totalWeight) : 0,
+            })),
+          };
+        })
+        .sort((a, b) => a.productName.localeCompare(b.productName, 'zh-CN'));
+      setSalesProductPrices(salesProductPricesData);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      console.error('Dashboard loadData error:', err);
     } finally {
       if (initialLoadRef.current) {
         setLoading(false);
@@ -246,9 +334,13 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    loadData();
-    const timer = setInterval(loadData, 10000);
-    return () => clearInterval(timer);
+    const controller = new AbortController();
+    loadData(controller.signal);
+    const timer = setInterval(() => loadData(controller.signal), 10000);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
   }, [loadData]);
 
   if (loading) {
@@ -297,6 +389,8 @@ export default function Dashboard() {
             <ChartAreaInteractive
               purchaseChartData={purchaseChartData}
               salesChartData={salesChartData}
+              purchaseProductPrices={purchaseProductPrices}
+              salesProductPrices={salesProductPrices}
               isPurchaseChartDemo={isPurchaseChartDemo}
               isSalesChartDemo={isSalesChartDemo}
             />

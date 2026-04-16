@@ -20,6 +20,14 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const purchaseChartConfig = {
   avgPrice: {
@@ -40,9 +48,16 @@ interface ChartDataItem {
   avgPrice: number;
 }
 
+interface ProductPriceData {
+  productName: string;
+  chartData: ChartDataItem[];
+}
+
 interface ChartAreaProps {
   purchaseChartData: ChartDataItem[];
   salesChartData: ChartDataItem[];
+  purchaseProductPrices: ProductPriceData[];
+  salesProductPrices: ProductPriceData[];
   isPurchaseChartDemo: boolean;
   isSalesChartDemo: boolean;
 }
@@ -54,6 +69,9 @@ function PriceChart({
   config,
   isDemo,
   gradientId,
+  productPrices,
+  selectedProduct,
+  onProductChange,
 }: {
   title: string;
   description: string;
@@ -61,30 +79,56 @@ function PriceChart({
   config: typeof purchaseChartConfig;
   isDemo: boolean;
   gradientId: string;
+  productPrices: ProductPriceData[];
+  selectedProduct: string;
+  onProductChange: (product: string) => void;
 }) {
+  const displayData = selectedProduct === 'all' 
+    ? data 
+    : productPrices.find(p => p.productName === selectedProduct)?.chartData || data;
+
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        <CardDescription className="flex items-center justify-between">
-          <span className="hidden @[540px]/card:block">
-            {description}
-          </span>
-          <span className="@[540px]/card:hidden">{description}</span>
-          {isDemo && (
-            <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-              <IconInfoCircle className="size-3 mr-1" />
-              暂无数据，显示示例
-            </Badge>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-base">{title}</CardTitle>
+            <CardDescription className="mt-1">
+              <span className="hidden @[540px]/card:block">
+                {description}
+              </span>
+              <span className="@[540px]/card:hidden">{description}</span>
+              {isDemo && selectedProduct === 'all' && (
+                <Badge variant="outline" className="ml-2 text-xs font-normal text-muted-foreground">
+                  <IconInfoCircle className="size-3 mr-1" />
+                  暂无数据，显示示例
+                </Badge>
+              )}
+            </CardDescription>
+          </div>
+          {productPrices.length > 0 && (
+            <Select value={selectedProduct} onValueChange={onProductChange}>
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <SelectValue placeholder="选择产品" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部产品</SelectItem>
+                {productPrices.map(p => (
+                  <SelectItem key={p.productName} value={p.productName}>
+                    {p.productName.length > 8 ? `${p.productName.slice(0, 8)}...` : p.productName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
-        </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
         <ChartContainer
           config={config}
           className="aspect-auto h-[250px] w-full"
         >
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <AreaChart data={displayData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -142,9 +186,14 @@ function PriceChart({
 export function ChartAreaInteractive({
   purchaseChartData,
   salesChartData,
+  purchaseProductPrices,
+  salesProductPrices,
   isPurchaseChartDemo,
   isSalesChartDemo,
 }: ChartAreaProps) {
+  const [selectedPurchaseProduct, setSelectedPurchaseProduct] = React.useState('all');
+  const [selectedSalesProduct, setSelectedSalesProduct] = React.useState('all');
+
   return (
     <div className="flex flex-col gap-4">
       <PriceChart
@@ -154,6 +203,9 @@ export function ChartAreaInteractive({
         config={purchaseChartConfig}
         isDemo={isPurchaseChartDemo}
         gradientId="purchasePriceGradient"
+        productPrices={purchaseProductPrices}
+        selectedProduct={selectedPurchaseProduct}
+        onProductChange={setSelectedPurchaseProduct}
       />
       <PriceChart
         title="成品塑料颗粒均价"
@@ -162,6 +214,9 @@ export function ChartAreaInteractive({
         config={salesChartConfig}
         isDemo={isSalesChartDemo}
         gradientId="salesPriceGradient"
+        productPrices={salesProductPrices}
+        selectedProduct={selectedSalesProduct}
+        onProductChange={setSelectedSalesProduct}
       />
     </div>
   );

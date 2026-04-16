@@ -606,7 +606,7 @@ export default function WelcomePage({ onEnterBackend }: WelcomePageProps) {
               如需了解更多产品信息或获取报价，欢迎随时与我们取得联系。我们的专业团队将在24小时内为您提供详尽的解决方案。
             </p>
 
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
               {contactInfo.map((info, i) => (
                 <div key={i} className="flex items-center gap-4 p-4 rounded-lg border border-zinc-800 bg-zinc-900/30">
                   <div className="w-10 h-10 rounded-lg bg-gold-400/10 flex items-center justify-center shrink-0">

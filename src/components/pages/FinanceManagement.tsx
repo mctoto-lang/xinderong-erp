@@ -40,8 +40,28 @@ export default function FinanceManagement() {
       ]);
       setPurchaseOrders(po);
       setSalesOrders(so);
-      setPayments(p);
-      setCollections(c);
+      
+      const poIds = new Set(po.map(o => o.id));
+      const soIds = new Set(so.map(o => o.id));
+      
+      const validPayments = p.filter(payment => {
+        if (payment.orderId && !poIds.has(payment.orderId)) {
+          dbPaymentRecords.remove(payment.id);
+          return false;
+        }
+        return true;
+      });
+      
+      const validCollections = c.filter(collection => {
+        if (collection.orderId && !soIds.has(collection.orderId)) {
+          dbCollectionRecords.remove(collection.id);
+          return false;
+        }
+        return true;
+      });
+      
+      setPayments(validPayments);
+      setCollections(validCollections);
     } finally {
       if (initialLoadRef.current) {
         setLoading(false);

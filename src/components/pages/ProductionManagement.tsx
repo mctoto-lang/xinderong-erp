@@ -163,9 +163,10 @@ export default function ProductionManagement() {
     pending: orders.filter(o => o.status === 'pending').length,
     processing: orders.filter(o => o.status === 'processing').length,
     completed: orders.filter(o => o.status === 'completed').length,
-    avgYield: orders.filter(o => o.status === 'completed' && o.avgYieldRate > 0).length > 0
-      ? orders.filter(o => o.status === 'completed').reduce((s, o) => s + o.avgYieldRate, 0) / orders.filter(o => o.status === 'completed').length
-      : 0,
+    avgYield: (() => {
+      const completed = orders.filter(o => o.status === 'completed' && o.avgYieldRate > 0);
+      return completed.length > 0 ? completed.reduce((s, o) => s + o.avgYieldRate, 0) / completed.length : 0;
+    })(),
   };
 
   const selectRawMaterial = (id: string) => {
@@ -243,13 +244,32 @@ export default function ProductionManagement() {
   };
 
   const startProcessing = async (order: ProductionOrder) => {
+    if (order.status !== 'pending') {
+      toast.error('该生产单不是待加工状态');
+      return;
+    }
     const items = await dbProductionOrderItems.getByOrderId(order.id);
+    const allInvBefore = await dbInventory.getAll();
+    const insufficientStock: string[] = [];
     for (const item of items) {
-      const allInv = await dbInventory.getAll();
-      const inv = allInv.find(i => i.productName === item.productName);
+      const inv = allInvBefore.find(i => i.productName === item.productName);
+      if (!inv || inv.rawMaterialStock < item.inputWeight) {
+        insufficientStock.push(`${item.productName}(库存:${inv?.rawMaterialStock ?? 0}KG, 需:${item.inputWeight}KG)`);
+      }
+    }
+    if (insufficientStock.length > 0) {
+      toast.error(`原料库存不足：${insufficientStock.join('；')}`);
+      return;
+    }
+
+    const inventoryMap = new Map(allInvBefore.map(inv => [inv.productName, inv]));
+    for (const item of items) {
+      const inv = inventoryMap.get(item.productName);
       if (inv) {
-        const newStock = Math.max(0, inv.rawMaterialStock - item.inputWeight);
-        await dbInventory.put({ ...inv, rawMaterialStock: newStock });
+        const newStock = inv.rawMaterialStock - item.inputWeight;
+        const updatedInv = { ...inv, rawMaterialStock: newStock };
+        await dbInventory.put(updatedInv);
+        inventoryMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
           inventoryId: inv.id,
           productName: item.productName,
@@ -271,7 +291,7 @@ export default function ProductionManagement() {
     setSelectedOrder(order);
     const items = await dbProductionOrderItems.getByOrderId(order.id);
     if (items.length > 0) {
-      setCompleteInputWeight(items[0].inputWeight);
+      setCompleteInputWeight(items.reduce((sum, item) => sum + item.inputWeight, 0));
     }
     setCompleteOutputWeight(0);
     setShowCompleteDialog(true);
@@ -279,6 +299,10 @@ export default function ProductionManagement() {
 
   const completeOrder = async () => {
     if (!selectedOrder) return;
+    if (selectedOrder.status !== 'processing') {
+      toast.error('该生产单不是加工中状态');
+      return;
+    }
     if (completeOutputWeight <= 0) {
       toast.error('请输入产出重量');
       return;
@@ -288,16 +312,15 @@ export default function ProductionManagement() {
     const yieldRate = completeInputWeight > 0 ? completeOutputWeight / completeInputWeight : 0;
     const outputProductName = items[0]?.outputProductName || '';
 
-    // Update production order items with output info
     for (const item of items) {
+      const itemYieldRate = item.inputWeight > 0 ? completeOutputWeight * (item.inputWeight / completeInputWeight) / item.inputWeight : yieldRate;
       await dbProductionOrderItems.put({
         ...item,
-        outputWeight: completeOutputWeight,
-        yieldRate,
+        outputWeight: item.inputWeight > 0 && completeInputWeight > 0 ? Math.round(completeOutputWeight * (item.inputWeight / completeInputWeight) * 100) / 100 : 0,
+        yieldRate: Math.round(itemYieldRate * 10000) / 10000,
       });
     }
 
-    // Add finished product to inventory
     const allInv = await dbInventory.getAll();
     let inv = allInv.find(i => i.productName === outputProductName);
     if (!inv) {
@@ -311,7 +334,8 @@ export default function ProductionManagement() {
       });
     }
     const newFinishedStock = inv.finishedProductStock + completeOutputWeight;
-    await dbInventory.put({ ...inv, finishedProductStock: newFinishedStock });
+    const isWarning = newFinishedStock < inv.warningThreshold;
+    await dbInventory.put({ ...inv, finishedProductStock: newFinishedStock, status: isWarning ? 'warning' : 'normal' });
     await dbInventoryLogs.add({
       inventoryId: inv.id,
       productName: outputProductName,
@@ -340,14 +364,17 @@ export default function ProductionManagement() {
     if (!order) return;
 
     const items = await dbProductionOrderItems.getByOrderId(id);
+    const allInvForDelete = await dbInventory.getAll();
+    const invDeleteMap = new Map(allInvForDelete.map(inv => [inv.productName, inv]));
 
     if (order.status === 'processing') {
       for (const item of items) {
-        const allInv = await dbInventory.getAll();
-        const inv = allInv.find(i => i.productName === item.productName);
+        const inv = invDeleteMap.get(item.productName);
         if (inv) {
           const newStock = inv.rawMaterialStock + item.inputWeight;
-          await dbInventory.put({ ...inv, rawMaterialStock: newStock });
+          const updatedInv = { ...inv, rawMaterialStock: newStock };
+          await dbInventory.put(updatedInv);
+          invDeleteMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: inv.id,
             productName: item.productName,
@@ -364,12 +391,12 @@ export default function ProductionManagement() {
 
     if (order.status === 'completed') {
       for (const item of items) {
-        // Return raw material
-        const allInvRaw = await dbInventory.getAll();
-        const invRaw = allInvRaw.find(i => i.productName === item.productName);
+        const invRaw = invDeleteMap.get(item.productName);
         if (invRaw) {
           const newRaw = invRaw.rawMaterialStock + item.inputWeight;
-          await dbInventory.put({ ...invRaw, rawMaterialStock: newRaw });
+          const updatedInv = { ...invRaw, rawMaterialStock: newRaw };
+          await dbInventory.put(updatedInv);
+          invDeleteMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: invRaw.id,
             productName: item.productName,
@@ -381,13 +408,13 @@ export default function ProductionManagement() {
             operator: currentUser?.name || '',
           });
         }
-        // Remove finished product
         if (item.outputWeight > 0 && item.outputProductName) {
-          const allInvFinished = await dbInventory.getAll();
-          const invFinished = allInvFinished.find(i => i.productName === item.outputProductName);
+          const invFinished = invDeleteMap.get(item.outputProductName);
           if (invFinished) {
             const newFinished = Math.max(0, invFinished.finishedProductStock - item.outputWeight);
-            await dbInventory.put({ ...invFinished, finishedProductStock: newFinished });
+            const updatedInv = { ...invFinished, finishedProductStock: newFinished };
+            await dbInventory.put(updatedInv);
+            invDeleteMap.set(item.outputProductName, updatedInv);
             await dbInventoryLogs.add({
               inventoryId: invFinished.id,
               productName: item.outputProductName,

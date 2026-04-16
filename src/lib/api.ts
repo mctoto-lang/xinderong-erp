@@ -7,12 +7,12 @@ import type {
   SystemSetting, AuditLog, Notification,
 } from './types';
 
-async function apiGet(entity: string, params?: Record<string, string>) {
+async function apiGet(entity: string, params?: Record<string, string>, signal?: AbortSignal) {
   const url = new URL(`/api/db/${entity}`, window.location.origin);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), { signal });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -65,7 +65,7 @@ async function apiRemoveByOrderId(entity: string, orderId: string) {
 
 function createEntityApi<T extends { id: string }>(entity: string) {
   return {
-    getAll: () => apiGet(entity) as Promise<T[]>,
+    getAll: (signal?: AbortSignal) => apiGet(entity, undefined, signal) as Promise<T[]>,
     getById: (id: string) => apiGet(entity, { id }) as Promise<T | null>,
     add: (data: Omit<T, 'id'> & { id?: string }) => apiPost(entity, data) as Promise<T>,
     put: (data: T) => apiPut(entity, data) as Promise<T>,

@@ -230,13 +230,16 @@ export default function SalesManagement() {
 
     if (editingOrder) {
       const oldItems = await dbSalesOrderItems.getByOrderId(editingOrder.id);
+      const allInvForRollback = await dbInventory.getAll();
+      const invRollbackMap = new Map(allInvForRollback.map(inv => [inv.productName, inv]));
       for (const oldItem of oldItems) {
-        const allInv = await dbInventory.getAll();
-        const inv = allInv.find(i => i.productName === oldItem.productName);
+        const inv = invRollbackMap.get(oldItem.productName);
         if (inv) {
           const newStock = inv.finishedProductStock + oldItem.weight;
-          const isWarning = newStock < inv.warningThreshold && inv.rawMaterialStock < inv.warningThreshold;
-          await dbInventory.put({ ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' });
+          const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
+          const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+          await dbInventory.put(updatedInv);
+          invRollbackMap.set(oldItem.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: inv.id, productName: oldItem.productName, logType: '编辑回退',
             relatedOrderNo: orderNo, quantity: oldItem.weight, balance: newStock,
@@ -250,7 +253,7 @@ export default function SalesManagement() {
       orderNo, date: orderForm.date, customerId: customer.id, customerName: customer.name,
       totalAmount, freight: orderForm.freight,
       collectedAmount: editingOrder?.collectedAmount || 0,
-      uncollectedAmount: totalAmount - (editingOrder?.collectedAmount || 0),
+      uncollectedAmount: Math.max(0, totalAmount - (editingOrder?.collectedAmount || 0)),
       paymentStatus: (editingOrder?.collectedAmount || 0) >= totalAmount ? 'paid' : (editingOrder?.collectedAmount || 0) > 0 ? 'partial' : 'unpaid',
       remark: orderForm.remark, createdBy: currentUser?.name || '',
     };
@@ -272,13 +275,28 @@ export default function SalesManagement() {
       }))
     );
 
+    const allInvBefore = await dbInventory.getAll();
+    const insufficientStock: string[] = [];
     for (const item of validItems) {
-      const allInv = await dbInventory.getAll();
-      const inv = allInv.find(i => i.productName === item.productName);
-      if (inv && inv.finishedProductStock >= item.weight) {
+      const inv = allInvBefore.find(i => i.productName === item.productName);
+      if (!inv || inv.finishedProductStock < item.weight) {
+        insufficientStock.push(`${item.productName}(库存:${inv?.finishedProductStock ?? 0}KG, 需:${item.weight}KG)`);
+      }
+    }
+    if (insufficientStock.length > 0) {
+      toast.error(`库存不足：${insufficientStock.join('；')}`);
+      return;
+    }
+
+    const inventoryMap = new Map(allInvBefore.map(inv => [inv.productName, inv]));
+    for (const item of validItems) {
+      const inv = inventoryMap.get(item.productName);
+      if (inv) {
         const newStock = inv.finishedProductStock - item.weight;
-        const isWarning = newStock < inv.warningThreshold && inv.rawMaterialStock < inv.warningThreshold;
-        await dbInventory.put({ ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' });
+        const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
+        const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+        await dbInventory.put(updatedInv);
+        inventoryMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
           inventoryId: inv.id, productName: item.productName, logType: '出货出库',
           relatedOrderNo: orderNo, quantity: -item.weight, balance: newStock,
@@ -297,13 +315,16 @@ export default function SalesManagement() {
     const order = orders.find(o => o.id === id);
     if (!order) return;
     const items = await dbSalesOrderItems.getByOrderId(id);
+    const allInvForDelete = await dbInventory.getAll();
+    const invDeleteMap = new Map(allInvForDelete.map(inv => [inv.productName, inv]));
     for (const item of items) {
-      const allInv = await dbInventory.getAll();
-      const inv = allInv.find(i => i.productName === item.productName);
+      const inv = invDeleteMap.get(item.productName);
       if (inv) {
         const newStock = inv.finishedProductStock + item.weight;
-        const isWarning = newStock < inv.warningThreshold && inv.rawMaterialStock < inv.warningThreshold;
-        await dbInventory.put({ ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' });
+        const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
+        const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+        await dbInventory.put(updatedInv);
+        invDeleteMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
           inventoryId: inv.id, productName: item.productName, logType: '出货撤销',
           relatedOrderNo: order.orderNo, quantity: item.weight, balance: newStock,
