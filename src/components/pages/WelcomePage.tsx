@@ -301,7 +301,7 @@ export default function WelcomePage({ onEnterBackend }: WelcomePageProps) {
           <div className="mx-auto max-w-[1400px] px-6 md:px-12">
             <RevealSection className="mb-16 text-center">
               <div className="mb-4 flex w-full items-center justify-center gap-3">
-                <span className="h-px w-6 bg-gray-300" />
+                <span className="h-px w-12 bg-gray-300" />
                 <span className="text-xs tracking-[0.25em] text-gray-400">PRODUCT CENTER</span>
                 <span className="h-px w-12 bg-gray-300" />
               </div>
@@ -348,7 +348,7 @@ export default function WelcomePage({ onEnterBackend }: WelcomePageProps) {
           <div className="mx-auto max-w-[1200px] px-6 md:px-12">
             <RevealSection className="mb-16 text-center">
               <div className="mb-4 flex w-full items-center justify-center gap-3">
-                <span className="h-px w-6 bg-gray-300" />
+                <span className="h-px w-12 bg-gray-300" />
                 <span className="text-xs tracking-[0.25em] text-gray-400">CORE ADVANTAGES</span>
                 <span className="h-px w-12 bg-gray-300" />
               </div>
@@ -388,7 +388,7 @@ export default function WelcomePage({ onEnterBackend }: WelcomePageProps) {
             <div className="grid items-center gap-16 lg:grid-cols-2">
               <RevealSection>
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="h-px w-6 bg-gray-300" />
+                  <span className="h-px w-12 bg-gray-300" />
                   <span className="text-xs tracking-[0.25em] text-gray-400">ABOUT US</span>
                   <span className="h-px w-12 bg-gray-300" />
                 </div>
@@ -447,7 +447,7 @@ export default function WelcomePage({ onEnterBackend }: WelcomePageProps) {
           <div className="mx-auto max-w-[1200px] px-6 md:px-12">
             <RevealSection className="mb-16 text-center">
               <div className="mb-4 flex w-full items-center justify-center gap-3">
-                <span className="h-px w-6 bg-gray-300" />
+                <span className="h-px w-12 bg-gray-300" />
                 <span className="text-xs tracking-[0.25em] text-gray-400">CONTACT US</span>
                 <span className="h-px w-12 bg-gray-300" />
               </div>
