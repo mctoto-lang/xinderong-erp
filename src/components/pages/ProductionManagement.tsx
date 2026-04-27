@@ -263,13 +263,14 @@ export default function ProductionManagement() {
     }
 
     const inventoryMap = new Map(allInvBefore.map(inv => [inv.productName, inv]));
-    for (const item of items) {
-      const inv = inventoryMap.get(item.productName);
-      if (inv) {
-        const newStock = inv.rawMaterialStock - item.inputWeight;
-        const updatedInv = { ...inv, rawMaterialStock: newStock };
-        await dbInventory.put(updatedInv);
-        inventoryMap.set(item.productName, updatedInv);
+      for (const item of items) {
+        const inv = inventoryMap.get(item.productName);
+        if (inv) {
+          const newStock = inv.rawMaterialStock - item.inputWeight;
+          const isWarning = newStock < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+          const updatedInv = { ...inv, rawMaterialStock: newStock, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
+          await dbInventory.put(updatedInv);
+          inventoryMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
           inventoryId: inv.id,
           productName: item.productName,
@@ -372,7 +373,8 @@ export default function ProductionManagement() {
         const inv = invDeleteMap.get(item.productName);
         if (inv) {
           const newStock = inv.rawMaterialStock + item.inputWeight;
-          const updatedInv = { ...inv, rawMaterialStock: newStock };
+          const isWarning = newStock < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+          const updatedInv = { ...inv, rawMaterialStock: newStock, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
           await dbInventory.put(updatedInv);
           invDeleteMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
@@ -394,7 +396,8 @@ export default function ProductionManagement() {
         const invRaw = invDeleteMap.get(item.productName);
         if (invRaw) {
           const newRaw = invRaw.rawMaterialStock + item.inputWeight;
-          const updatedInv = { ...invRaw, rawMaterialStock: newRaw };
+          const isRawWarning = newRaw < invRaw.warningThreshold || invRaw.finishedProductStock < invRaw.warningThreshold;
+          const updatedInv = { ...invRaw, rawMaterialStock: newRaw, status: (isRawWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
           await dbInventory.put(updatedInv);
           invDeleteMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
@@ -412,7 +415,8 @@ export default function ProductionManagement() {
           const invFinished = invDeleteMap.get(item.outputProductName);
           if (invFinished) {
             const newFinished = Math.max(0, invFinished.finishedProductStock - item.outputWeight);
-            const updatedInv = { ...invFinished, finishedProductStock: newFinished };
+            const isFinishedWarning = invFinished.rawMaterialStock < invFinished.warningThreshold || newFinished < invFinished.warningThreshold;
+            const updatedInv = { ...invFinished, finishedProductStock: newFinished, status: (isFinishedWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
             await dbInventory.put(updatedInv);
             invDeleteMap.set(item.outputProductName, updatedInv);
             await dbInventoryLogs.add({

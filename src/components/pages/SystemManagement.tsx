@@ -52,7 +52,7 @@ export default function SystemManagement() {
 
   const [showCatDialog, setShowCatDialog] = useState(false);
   const [editingCat, setEditingCat] = useState<ProductCategory | null>(null);
-  const [catForm, setCatForm] = useState({ name: '', category: 'purchase' as const, spec: '', sort: 0, status: 'active' as const });
+  const [catForm, setCatForm] = useState<{ name: string; category: 'purchase' | 'sale'; spec: string; sort: number; status: 'active' | 'disabled' }>({ name: '', category: 'purchase', spec: '', sort: 0, status: 'active' });
   const [catTarget, setCatTarget] = useState<'purchase' | 'sale'>('purchase');
 
   const [userSearch, setUserSearch] = useState('');
@@ -376,7 +376,8 @@ export default function SystemManagement() {
             inventoryMap.set(item.productName, inv);
           }
           const newRaw = inv.rawMaterialStock + item.weight;
-          const updatedInv = { ...inv, rawMaterialStock: newRaw };
+          const isWarning = newRaw < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+          const updatedInv = { ...inv, rawMaterialStock: newRaw, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
           await dbInventory.put(updatedInv);
           inventoryMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
@@ -439,6 +440,7 @@ export default function SystemManagement() {
       let successCount = 0;
       let errorCount = 0;
       const notFoundCustomers = new Set<string>();
+      const parseErrors: string[] = [];
       const orderMap: Record<string, { items: Array<{ productName: string; weight: number; unitPrice: number }>; freight: number; remark: string }> = {};
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -457,6 +459,8 @@ export default function SystemManagement() {
         orderMap[key].freight = Math.max(orderMap[key].freight, freight);
         orderMap[key].remark = remark || orderMap[key].remark;
       }
+      const allSalesInventory = await dbInventory.getAll();
+      const salesInvMap = new Map(allSalesInventory.map(inv => [inv.productName, inv]));
       for (const [key, orderData] of Object.entries(orderMap)) {
         const [date, customerName] = key.split('|');
         const customer = customers.find(c => c.name === customerName);
@@ -465,6 +469,20 @@ export default function SystemManagement() {
           notFoundCustomers.add(customerName);
           continue; 
         }
+
+        const insufficientItems: string[] = [];
+        for (const item of orderData.items) {
+          const inv = salesInvMap.get(item.productName);
+          if (!inv || inv.finishedProductStock < item.weight) {
+            insufficientItems.push(`${item.productName}(库存:${inv?.finishedProductStock ?? 0}KG, 需:${item.weight}KG)`);
+          }
+        }
+        if (insufficientItems.length > 0) {
+          errorCount += orderData.items.length;
+          parseErrors.push(`客户${customerName}的订单库存不足：${insufficientItems.join('；')}`);
+          continue;
+        }
+
         const totalAmount = orderData.items.reduce((sum, item) => sum + item.weight * item.unitPrice, 0) + orderData.freight;
         const res = await fetch(`/api/orderNo?prefix=CHD&date=${date}`);
         const { orderNo } = await res.json();
@@ -478,16 +496,19 @@ export default function SystemManagement() {
           weight: item.weight, unitPrice: item.unitPrice, amount: item.weight * item.unitPrice,
         })));
         for (const item of orderData.items) {
-          const allInv = await dbInventory.getAll();
-          let inv = allInv.find(i => i.productName === item.productName);
+          let inv = salesInvMap.get(item.productName);
           if (!inv) {
             inv = await dbInventory.add({
               productName: item.productName, category: '成品', rawMaterialStock: 0,
               finishedProductStock: 0, warningThreshold: 100, status: 'normal',
             });
+            salesInvMap.set(item.productName, inv);
           }
-          const newFinished = Math.max(0, inv.finishedProductStock - item.weight);
-          await dbInventory.put({ ...inv, finishedProductStock: newFinished });
+          const newFinished = inv.finishedProductStock - item.weight;
+          const isWarning = inv.rawMaterialStock < inv.warningThreshold || newFinished < inv.warningThreshold;
+          const updatedInv = { ...inv, finishedProductStock: newFinished, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
+          await dbInventory.put(updatedInv);
+          salesInvMap.set(item.productName, updatedInv);
           await dbInventoryLogs.add({
             inventoryId: inv.id, productName: item.productName, logType: '批量导入',
             relatedOrderNo: orderNo, quantity: -item.weight, balance: newFinished,
@@ -498,8 +519,17 @@ export default function SystemManagement() {
       }
       await dbAuditLogs.add({ operator: currentUser?.name || '', module: '批量导入', action: '出货订单', detail: `成功导入 ${successCount} 条，失败 ${errorCount} 条` });
       
-      if (notFoundCustomers.size > 0) {
-        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。未找到客户：${Array.from(notFoundCustomers).join('、')}`);
+      if (notFoundCustomers.size > 0 || parseErrors.length > 0) {
+        const messages: string[] = [];
+        if (notFoundCustomers.size > 0) {
+          messages.push(`未找到客户：${Array.from(notFoundCustomers).join('、')}`);
+        }
+        if (parseErrors.length > 0 && parseErrors.length <= 3) {
+          messages.push(parseErrors.join('；'));
+        } else if (parseErrors.length > 3) {
+          messages.push(`${parseErrors.slice(0, 3).join('；')}...等${parseErrors.length}条`);
+        }
+        toast.error(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条。${messages.join('。')}`);
       } else {
         toast.success(`导入完成：成功 ${successCount} 条，失败 ${errorCount} 条`);
       }

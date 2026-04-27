@@ -38,7 +38,7 @@ import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import type { LogisticsRecord, PurchaseOrder, SalesOrder } from '@/lib/types';
+import type { LogisticsRecord, LogisticsStatus, PurchaseOrder, SalesOrder } from '@/lib/types';
 
 // Order Select Combobox Component
 function OrderSelectCombobox({
@@ -159,7 +159,7 @@ export default function LogisticsManagement() {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
 
-  const [form, setForm] = useState({ type: 'purchase' as const, relatedOrderNo: '', plateNumber: '', driver: '', freight: 0, date: getTodayStr(), fromAddress: '', toAddress: '', status: 'pending' as const, remark: '' });
+  const [form, setForm] = useState<{ type: 'purchase' | 'sale'; relatedOrderNo: string; plateNumber: string; driver: string; freight: number; date: string; fromAddress: string; toAddress: string; status: LogisticsStatus; remark: string }>({ type: 'purchase', relatedOrderNo: '', plateNumber: '', driver: '', freight: 0, date: getTodayStr(), fromAddress: '', toAddress: '', status: 'pending', remark: '' });
 
   const initialLoadRef = useRef(true);
   const loadData = useCallback(async () => {

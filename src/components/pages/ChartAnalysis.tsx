@@ -327,7 +327,7 @@ export default function ChartAnalysis() {
                     tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
                   />
                   <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value, name, item) => [`¥${Number(value).toFixed(2)}/KG`, item.payload.name]} />} />
-                  <Bar dataKey="avgPrice" fill="#93c5fd" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `¥${v.toFixed(2)}` }} />
+                  <Bar dataKey="avgPrice" fill="#93c5fd" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v) => `¥${Number(v).toFixed(2)}` }} />
                 </BarChart>
               </ChartContainer>
             )}</CardContent>
@@ -423,7 +423,7 @@ export default function ChartAnalysis() {
                       tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
                     />
                     <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value) => [`¥${Number(value).toLocaleString('zh-CN')}`, '金额']} />} />
-                    <Bar dataKey="amount" fill="#6ee7b7" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `¥${(v / 1000).toFixed(0)}k` }} />
+                    <Bar dataKey="amount" fill="#6ee7b7" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v) => `¥${(Number(v) / 1000).toFixed(0)}k` }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>
@@ -444,7 +444,7 @@ export default function ChartAnalysis() {
                       tickFormatter={(value: string) => value.length > 8 ? `${value.slice(0, 8)}...` : value}
                     />
                     <ChartTooltip content={<ChartTooltipContent hideLabel formatter={(value) => [`${Number(value).toLocaleString('zh-CN')} KG`, '重量']} />} />
-                    <Bar dataKey="weight" fill="#fcd34d" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v: number) => `${v}KG` }} />
+                    <Bar dataKey="weight" fill="#fcd34d" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666', fontSize: 11, formatter: (v) => `${Number(v)}KG` }} />
                   </BarChart>
                 </ChartContainer>
               )}</CardContent>

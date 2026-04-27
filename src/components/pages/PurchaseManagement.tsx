@@ -272,7 +272,8 @@ export default function PurchaseManagement() {
         const inv = invRollbackMap.get(oldItem.productName);
         if (inv) {
           const newRaw = Math.max(0, inv.rawMaterialStock - oldItem.weight);
-          const updatedInv = { ...inv, rawMaterialStock: newRaw };
+          const isWarning = newRaw < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+          const updatedInv = { ...inv, rawMaterialStock: newRaw, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
           await dbInventory.put(updatedInv);
           invRollbackMap.set(oldItem.productName, updatedInv);
           await dbInventoryLogs.add({
@@ -341,8 +342,8 @@ export default function PurchaseManagement() {
         invAddMap.set(item.productName, inv);
       }
       const newRaw = inv.rawMaterialStock + item.weight;
-      const isWarning = newRaw < inv.warningThreshold;
-      const updatedInv = { ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' as const };
+      const isWarning = newRaw < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+      const updatedInv = { ...inv, rawMaterialStock: newRaw, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
       await dbInventory.put(updatedInv);
       invAddMap.set(item.productName, updatedInv);
       await dbInventoryLogs.add({
@@ -381,8 +382,8 @@ export default function PurchaseManagement() {
       const inv = invDeleteMap.get(item.productName);
       if (inv) {
         const newRaw = Math.max(0, inv.rawMaterialStock - item.weight);
-        const isWarning = newRaw < inv.warningThreshold;
-        const updatedInv = { ...inv, rawMaterialStock: newRaw, status: isWarning ? 'warning' : 'normal' as const };
+        const isWarning = newRaw < inv.warningThreshold || inv.finishedProductStock < inv.warningThreshold;
+        const updatedInv = { ...inv, rawMaterialStock: newRaw, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
         await dbInventory.put(updatedInv);
         invDeleteMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({

@@ -114,7 +114,7 @@ export default function SalesManagement() {
   const [orderItems, setOrderItems] = useState<Array<{ productId: string; productName: string; weight: number; unitPrice: number }>>([
     { productId: '', productName: '', weight: 0, unitPrice: 0 },
   ]);
-  const [collectionForm, setCollectionForm] = useState({ amount: 0, method: PAYMENT_METHODS[0], date: getTodayStr(), remark: '' });
+  const [collectionForm, setCollectionForm] = useState<{ amount: number; method: typeof PAYMENT_METHODS[number]; date: string; remark: string }>({ amount: 0, method: PAYMENT_METHODS[0], date: getTodayStr(), remark: '' });
   const [detailItems, setDetailItems] = useState<SalesOrderItem[]>([]);
   const [detailCollections, setDetailCollections] = useState<CollectionRecord[]>([]);
 
@@ -132,7 +132,7 @@ export default function SalesManagement() {
         dbSystemSettings.getByKey('companyAddress'),
         dbSystemSettings.getByKey('companyPhone'),
       ]);
-      orderList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      orderList.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       categoryList.sort((a, b) => a.sort - b.sort);
       setOrders(orderList);
       setCustomers(customerList);
@@ -219,6 +219,33 @@ export default function SalesManagement() {
     if (validItems.length === 0) { toast.error('请添加至少一项货品'); return; }
 
     const totalAmount = validItems.reduce((sum, i) => sum + i.weight * i.unitPrice, 0) + orderForm.freight;
+
+    const allInvBefore = await dbInventory.getAll();
+    const invCheckMap = new Map(allInvBefore.map(inv => [inv.productName, inv]));
+
+    if (editingOrder) {
+      const oldItems = await dbSalesOrderItems.getByOrderId(editingOrder.id);
+      for (const oldItem of oldItems) {
+        const inv = invCheckMap.get(oldItem.productName);
+        if (inv) {
+          const rolledBack = { ...inv, finishedProductStock: inv.finishedProductStock + oldItem.weight };
+          invCheckMap.set(oldItem.productName, rolledBack);
+        }
+      }
+    }
+
+    const insufficientStock: string[] = [];
+    for (const item of validItems) {
+      const inv = invCheckMap.get(item.productName);
+      if (!inv || inv.finishedProductStock < item.weight) {
+        insufficientStock.push(`${item.productName}(库存:${inv?.finishedProductStock ?? 0}KG, 需:${item.weight}KG)`);
+      }
+    }
+    if (insufficientStock.length > 0) {
+      toast.error(`库存不足：${insufficientStock.join('；')}`);
+      return;
+    }
+
     let orderNo: string;
     if (editingOrder) {
       orderNo = editingOrder.orderNo;
@@ -237,7 +264,7 @@ export default function SalesManagement() {
         if (inv) {
           const newStock = inv.finishedProductStock + oldItem.weight;
           const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
-          const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+          const updatedInv = { ...inv, finishedProductStock: newStock, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
           await dbInventory.put(updatedInv);
           invRollbackMap.set(oldItem.productName, updatedInv);
           await dbInventoryLogs.add({
@@ -275,26 +302,14 @@ export default function SalesManagement() {
       }))
     );
 
-    const allInvBefore = await dbInventory.getAll();
-    const insufficientStock: string[] = [];
-    for (const item of validItems) {
-      const inv = allInvBefore.find(i => i.productName === item.productName);
-      if (!inv || inv.finishedProductStock < item.weight) {
-        insufficientStock.push(`${item.productName}(库存:${inv?.finishedProductStock ?? 0}KG, 需:${item.weight}KG)`);
-      }
-    }
-    if (insufficientStock.length > 0) {
-      toast.error(`库存不足：${insufficientStock.join('；')}`);
-      return;
-    }
-
-    const inventoryMap = new Map(allInvBefore.map(inv => [inv.productName, inv]));
+    const allInvForDeduct = await dbInventory.getAll();
+    const inventoryMap = new Map(allInvForDeduct.map(inv => [inv.productName, inv]));
     for (const item of validItems) {
       const inv = inventoryMap.get(item.productName);
       if (inv) {
         const newStock = inv.finishedProductStock - item.weight;
         const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
-        const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+        const updatedInv = { ...inv, finishedProductStock: newStock, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
         await dbInventory.put(updatedInv);
         inventoryMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
@@ -322,7 +337,7 @@ export default function SalesManagement() {
       if (inv) {
         const newStock = inv.finishedProductStock + item.weight;
         const isWarning = newStock < inv.warningThreshold || inv.rawMaterialStock < inv.warningThreshold;
-        const updatedInv = { ...inv, finishedProductStock: newStock, status: isWarning ? 'warning' : 'normal' as const };
+        const updatedInv = { ...inv, finishedProductStock: newStock, status: (isWarning ? 'warning' : 'normal') as 'warning' | 'normal' };
         await dbInventory.put(updatedInv);
         invDeleteMap.set(item.productName, updatedInv);
         await dbInventoryLogs.add({
@@ -723,7 +738,7 @@ export default function SalesManagement() {
               </div>
               <div className="space-y-2">
                 <Label>收款方式</Label>
-                <Select value={collectionForm.method} onValueChange={v => setCollectionForm({ ...collectionForm, method: v })}>
+                <Select value={collectionForm.method} onValueChange={v => setCollectionForm({ ...collectionForm, method: v as typeof PAYMENT_METHODS[number] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

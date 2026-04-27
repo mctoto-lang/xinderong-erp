@@ -28,7 +28,9 @@ export default function FinanceManagement() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [payablePage, setPayablePage] = useState(1);
+  const [receivablePage, setReceivablePage] = useState(1);
+  const [cashflowPage, setCashflowPage] = useState(1);
   const pageSize = 10;
 
   const initialLoadRef = useRef(true);
@@ -44,24 +46,20 @@ export default function FinanceManagement() {
       const poIds = new Set(po.map(o => o.id));
       const soIds = new Set(so.map(o => o.id));
       
-      const validPayments = p.filter(payment => {
-        if (payment.orderId && !poIds.has(payment.orderId)) {
-          dbPaymentRecords.remove(payment.id);
-          return false;
-        }
-        return true;
-      });
-      
-      const validCollections = c.filter(collection => {
-        if (collection.orderId && !soIds.has(collection.orderId)) {
-          dbCollectionRecords.remove(collection.id);
-          return false;
-        }
-        return true;
-      });
+      const validPayments = p.filter(payment => !payment.orderId || poIds.has(payment.orderId));
+      const validCollections = c.filter(collection => !collection.orderId || soIds.has(collection.orderId));
       
       setPayments(validPayments);
       setCollections(validCollections);
+
+      const orphanPaymentIds = p.filter(payment => payment.orderId && !poIds.has(payment.orderId)).map(p => p.id);
+      const orphanCollectionIds = c.filter(collection => collection.orderId && !soIds.has(collection.orderId)).map(c => c.id);
+      if (orphanPaymentIds.length > 0 || orphanCollectionIds.length > 0) {
+        Promise.all([
+          ...orphanPaymentIds.map(id => dbPaymentRecords.remove(id)),
+          ...orphanCollectionIds.map(id => dbCollectionRecords.remove(id)),
+        ]).catch(() => {});
+      }
     } finally {
       if (initialLoadRef.current) {
         setLoading(false);
@@ -114,9 +112,9 @@ export default function FinanceManagement() {
   const filteredTransactions = allTransactions.filter(t => !searchTerm || t.orderNo.includes(searchTerm));
 
   // Pagination helpers
-  const getPaginationData = (items: unknown[]) => {
+  const getPaginationData = <T,>(items: T[], page: number) => {
     const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-    const safePage = Math.min(currentPage, totalPages);
+    const safePage = Math.min(page, totalPages);
     const paginatedItems = items.slice((safePage - 1) * pageSize, safePage * pageSize);
     const pageNumbers: (number | 'ellipsis')[] = [];
     if (totalPages <= 7) {
@@ -133,9 +131,9 @@ export default function FinanceManagement() {
     return { totalPages, safePage, paginatedItems, pageNumbers };
   };
 
-  const payablePagination = useMemo(() => getPaginationData(payableOrders), [payableOrders, currentPage]);
-  const receivablePagination = useMemo(() => getPaginationData(receivableOrders), [receivableOrders, currentPage]);
-  const transactionPagination = useMemo(() => getPaginationData(filteredTransactions), [filteredTransactions, currentPage]);
+  const payablePagination = useMemo(() => getPaginationData(payableOrders, payablePage), [payableOrders, payablePage]);
+  const receivablePagination = useMemo(() => getPaginationData(receivableOrders, receivablePage), [receivableOrders, receivablePage]);
+  const transactionPagination = useMemo(() => getPaginationData(filteredTransactions, cashflowPage), [filteredTransactions, cashflowPage]);
 
   // Monthly profit
   const monthMap: Record<string, { revenue: number; cost: number; freight: number }> = {};
@@ -209,11 +207,11 @@ export default function FinanceManagement() {
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
-                    <PaginationPrevious onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className={payablePagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationPrevious onClick={() => setPayablePage(p => Math.max(1, p - 1))} className={payablePagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
-                  {payablePagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === payablePagination.safePage} onClick={() => setCurrentPage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
+                  {payablePagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === payablePagination.safePage} onClick={() => setPayablePage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
                   <PaginationItem>
-                    <PaginationNext onClick={() => setCurrentPage(p => Math.min(payablePagination.totalPages, p + 1))} className={payablePagination.safePage >= payablePagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationNext onClick={() => setPayablePage(p => Math.min(payablePagination.totalPages, p + 1))} className={payablePagination.safePage >= payablePagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
@@ -256,11 +254,11 @@ export default function FinanceManagement() {
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
-                    <PaginationPrevious onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className={receivablePagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationPrevious onClick={() => setReceivablePage(p => Math.max(1, p - 1))} className={receivablePagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
-                  {receivablePagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === receivablePagination.safePage} onClick={() => setCurrentPage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
+                  {receivablePagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === receivablePagination.safePage} onClick={() => setReceivablePage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
                   <PaginationItem>
-                    <PaginationNext onClick={() => setCurrentPage(p => Math.min(receivablePagination.totalPages, p + 1))} className={receivablePagination.safePage >= receivablePagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationNext onClick={() => setReceivablePage(p => Math.min(receivablePagination.totalPages, p + 1))} className={receivablePagination.safePage >= receivablePagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
@@ -303,11 +301,11 @@ export default function FinanceManagement() {
               <Pagination>
                 <PaginationContent>
                   <PaginationItem>
-                    <PaginationPrevious onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className={transactionPagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationPrevious onClick={() => setCashflowPage(p => Math.max(1, p - 1))} className={transactionPagination.safePage <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
-                  {transactionPagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === transactionPagination.safePage} onClick={() => setCurrentPage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
+                  {transactionPagination.pageNumbers.map((page, idx) => page === 'ellipsis' ? <PaginationItem key={`e-${idx}`}><PaginationEllipsis /></PaginationItem> : <PaginationItem key={page}><PaginationLink isActive={page === transactionPagination.safePage} onClick={() => setCashflowPage(page)} className="cursor-pointer">{page}</PaginationLink></PaginationItem>)}
                   <PaginationItem>
-                    <PaginationNext onClick={() => setCurrentPage(p => Math.min(transactionPagination.totalPages, p + 1))} className={transactionPagination.safePage >= transactionPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
+                    <PaginationNext onClick={() => setCashflowPage(p => Math.min(transactionPagination.totalPages, p + 1))} className={transactionPagination.safePage >= transactionPagination.totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'} />
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>

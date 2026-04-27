@@ -149,7 +149,7 @@ export default function InventoryManagement() {
 
   const saveThreshold = async () => {
     if (!selectedProduct) return;
-    const isWarning = selectedProduct.rawMaterialStock < thresholdValue && selectedProduct.finishedProductStock < thresholdValue;
+    const isWarning = selectedProduct.rawMaterialStock < thresholdValue || selectedProduct.finishedProductStock < thresholdValue;
     await dbInventory.put({ 
       id: selectedProduct.id,
       productName: selectedProduct.productName,
