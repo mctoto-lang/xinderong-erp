@@ -485,6 +485,7 @@ export default function PurchaseManagement() {
         supplierOrCustomer: order.supplierName,
         items: items.map(item => ({
           productName: item.productName,
+          spec: item.spec || '',
           weight: item.weight,
           unitPrice: item.unitPrice,
           amount: item.amount,

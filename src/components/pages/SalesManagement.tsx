@@ -409,12 +409,16 @@ export default function SalesManagement() {
         orderNo: order.orderNo,
         date: order.date,
         supplierOrCustomer: order.customerName,
-        items: items.map(item => ({
-          productName: item.productName,
-          weight: item.weight,
-          unitPrice: item.unitPrice,
-          amount: item.amount,
-        })),
+        items: items.map(item => {
+          const category = saleCategories.find(c => c.id === item.productId);
+          return {
+            productName: item.productName,
+            spec: category?.spec || '',
+            weight: item.weight,
+            unitPrice: item.unitPrice,
+            amount: item.amount,
+          };
+        }),
         totalWeight: items.reduce((sum, item) => sum + item.weight, 0),
         totalAmount: order.totalAmount,
         freight: order.freight,

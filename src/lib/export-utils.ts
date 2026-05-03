@@ -17,17 +17,24 @@ interface ExportOrder {
 
 interface ExportOrderItem {
   productName: string;
+  spec?: string;
   weight: number;
   unitPrice: number;
   amount: number;
 }
 
+interface ProductInfo {
+  name: string;
+  spec?: string;
+  displayName: string;
+}
+
 const PRODUCT_COLORS = [
-  { bg: 'FFE6F3FF', font: 'FF0066CC' },
-  { bg: 'FFFFF0E6', font: 'FFCC6600' },
-  { bg: 'FFE6FFE6', font: 'FF009933' },
-  { bg: 'FFFFFDE6', font: 'FF996600' },
-  { bg: 'FFF3E6FF', font: 'FF6600CC' },
+  { bg: 'E6F3FF', font: '0066CC' },
+  { bg: 'FFF0E6', font: 'CC6600' },
+  { bg: 'E6FFE6', font: '009933' },
+  { bg: 'FFFDE6', font: '996600' },
+  { bg: 'F3E6FF', font: '6600CC' },
 ];
 
 export function exportToExcel(
@@ -37,13 +44,20 @@ export function exportToExcel(
   dateTo: string,
   type: 'purchase' | 'sale'
 ) {
-  const allProducts = new Set<string>();
+  const productMap = new Map<string, ProductInfo>();
   orders.forEach(order => {
     order.items.forEach(item => {
-      allProducts.add(item.productName);
+      const key = item.productName;
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          name: item.productName,
+          spec: item.spec,
+          displayName: item.spec ? `${item.productName}（${item.spec}）` : item.productName,
+        });
+      }
     });
   });
-  const productList = Array.from(allProducts);
+  const productList = Array.from(productMap.values());
   const maxProducts = Math.max(3, productList.length);
 
   const dateRangeText = formatDateRange(dateFrom, dateTo);
@@ -51,15 +65,19 @@ export function exportToExcel(
   const headerRow = ['日期', type === 'purchase' ? '供应商' : '客户'];
 
   productList.slice(0, maxProducts).forEach((product, idx) => {
-    headerRow.push(`产品${idx + 1}（${product}）`);
-    headerRow.push(`产品${idx + 1}单价（￥）`);
-    headerRow.push(`产品${idx + 1}重量（KG）`);
+    const colorIdx = idx % PRODUCT_COLORS.length;
+    const colorLabel = ['蓝', '橙', '绿', '黄', '紫'][colorIdx];
+    headerRow.push(`【${colorLabel}】${product.displayName}`);
+    headerRow.push(`单价（￥）`);
+    headerRow.push(`重量（KG）`);
   });
 
   for (let i = productList.length; i < maxProducts; i++) {
-    headerRow.push(`产品${i + 1}`);
-    headerRow.push(`产品${i + 1}单价（￥）`);
-    headerRow.push(`产品${i + 1}重量（KG）`);
+    const colorIdx = i % PRODUCT_COLORS.length;
+    const colorLabel = ['蓝', '橙', '绿', '黄', '紫'][colorIdx];
+    headerRow.push(`【${colorLabel}】产品${i + 1}`);
+    headerRow.push(`单价（￥）`);
+    headerRow.push(`重量（KG）`);
   }
 
   headerRow.push('合计重量（KG）', '总金额', '运费', '已付款', '待付款', '付款状态');
@@ -67,15 +85,15 @@ export function exportToExcel(
   const dataRows: (string | number)[][] = [];
   orders.forEach(order => {
     const row: (string | number)[] = [order.date, order.supplierOrCustomer];
-    const productMap = new Map<string, ExportOrderItem>();
+    const itemMap = new Map<string, ExportOrderItem>();
     order.items.forEach(item => {
-      productMap.set(item.productName, item);
+      itemMap.set(item.productName, item);
     });
 
     productList.slice(0, maxProducts).forEach(product => {
-      const item = productMap.get(product);
+      const item = itemMap.get(product.name);
       if (item) {
-        row.push(item.productName);
+        row.push(item.spec ? `${item.productName}（${item.spec}）` : item.productName);
         row.push(item.unitPrice.toFixed(2));
         row.push(item.weight.toFixed(2));
       } else {
@@ -105,9 +123,9 @@ export function exportToExcel(
 
   const colWidths = [{ wch: 12 }, { wch: 15 }];
   for (let i = 0; i < maxProducts; i++) {
-    colWidths.push({ wch: 18 }, { wch: 14 }, { wch: 14 });
+    colWidths.push({ wch: 20 }, { wch: 12 }, { wch: 12 });
   }
-  colWidths.push({ wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 });
+  colWidths.push({ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 });
   ws['!cols'] = colWidths;
 
   if (!ws['!ref']) {
@@ -134,13 +152,20 @@ export function exportToPDF(
   dateTo: string,
   type: 'purchase' | 'sale'
 ) {
-  const allProducts = new Set<string>();
+  const productMap = new Map<string, ProductInfo>();
   orders.forEach(order => {
     order.items.forEach(item => {
-      allProducts.add(item.productName);
+      const key = item.productName;
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          name: item.productName,
+          spec: item.spec,
+          displayName: item.spec ? `${item.productName}（${item.spec}）` : item.productName,
+        });
+      }
     });
   });
-  const productList = Array.from(allProducts);
+  const productList = Array.from(productMap.values());
   const maxProducts = Math.min(productList.length, 5);
 
   const dateRangeText = formatDateRange(dateFrom, dateTo);
@@ -148,24 +173,25 @@ export function exportToPDF(
   const productHeaders = productList.slice(0, maxProducts).map((product, idx) => {
     const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
     return `
-      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px;">产品${idx + 1}（${product}）</th>
-      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px;">单价</th>
-      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px;">重量</th>
+      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">${product.displayName}</th>
+      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">单价（￥）</th>
+      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">重量（KG）</th>
     `;
   }).join('');
 
   const rows = orders.map(order => {
-    const productMap = new Map<string, ExportOrderItem>();
+    const itemMap = new Map<string, ExportOrderItem>();
     order.items.forEach(item => {
-      productMap.set(item.productName, item);
+      itemMap.set(item.productName, item);
     });
 
     const productCells = productList.slice(0, maxProducts).map((product, idx) => {
       const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
-      const item = productMap.get(product);
+      const item = itemMap.get(product.name);
       if (item) {
+        const displayProduct = item.spec ? `${item.productName}（${item.spec}）` : item.productName;
         return `
-          <td style="background-color: #${color.bg}; padding: 6px 4px; border: 1px solid #ddd; text-align: center; font-size: 11px;">${item.productName}</td>
+          <td style="background-color: #${color.bg}; padding: 6px 4px; border: 1px solid #ddd; text-align: center; font-size: 11px;">${displayProduct}</td>
           <td style="background-color: #${color.bg}; padding: 6px 4px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${item.unitPrice.toFixed(2)}</td>
           <td style="background-color: #${color.bg}; padding: 6px 4px; border: 1px solid #ddd; text-align: right; font-size: 11px;">${item.weight.toFixed(2)}</td>
         `;
