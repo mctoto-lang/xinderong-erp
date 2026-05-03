@@ -499,8 +499,8 @@ export default function PurchaseManagement() {
       };
     }));
 
-    const dateFromStr = dateFrom ? dateFnsFormat(dateFrom, 'yyyy-MM-dd') : '1970-01-01';
-    const dateToStr = dateTo ? dateFnsFormat(dateTo, 'yyyy-MM-dd') : getTodayStr();
+    const dateFromStr = dateFrom ? dateFnsFormat(dateFrom, 'yyyy-MM-dd') : undefined;
+    const dateToStr = dateTo ? dateFnsFormat(dateTo, 'yyyy-MM-dd') : undefined;
 
     if (format === 'xlsx') {
       exportToExcel(exportOrders, '进货表', dateFromStr, dateToStr, 'purchase');

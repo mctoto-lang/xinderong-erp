@@ -40,8 +40,8 @@ const PRODUCT_COLORS = [
 export function exportToExcel(
   orders: ExportOrder[],
   title: string,
-  dateFrom: string,
-  dateTo: string,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
   type: 'purchase' | 'sale'
 ) {
   const productMap = new Map<string, ProductInfo>();
@@ -61,23 +61,19 @@ export function exportToExcel(
   const maxProducts = Math.max(3, productList.length);
 
   const dateRangeText = formatDateRange(dateFrom, dateTo);
-  const titleRow = [`${title}（${dateRangeText}）`];
+  const titleRow = [`${title}${dateRangeText ? `（${dateRangeText}）` : ''}`];
   const headerRow = ['日期', type === 'purchase' ? '供应商' : '客户'];
 
   productList.slice(0, maxProducts).forEach((product, idx) => {
-    const colorIdx = idx % PRODUCT_COLORS.length;
-    const colorLabel = ['蓝', '橙', '绿', '黄', '紫'][colorIdx];
-    headerRow.push(`【${colorLabel}】${product.displayName}`);
-    headerRow.push(`单价（￥）`);
-    headerRow.push(`重量（KG）`);
+    headerRow.push(product.displayName);
+    headerRow.push('单价（￥）');
+    headerRow.push('重量（KG）');
   });
 
   for (let i = productList.length; i < maxProducts; i++) {
-    const colorIdx = i % PRODUCT_COLORS.length;
-    const colorLabel = ['蓝', '橙', '绿', '黄', '紫'][colorIdx];
-    headerRow.push(`【${colorLabel}】产品${i + 1}`);
-    headerRow.push(`单价（￥）`);
-    headerRow.push(`重量（KG）`);
+    headerRow.push(`产品${i + 1}`);
+    headerRow.push('单价（￥）');
+    headerRow.push('重量（KG）');
   }
 
   headerRow.push('合计重量（KG）', '总金额', '运费', '已付款', '待付款', '付款状态');
@@ -121,6 +117,10 @@ export function exportToExcel(
 
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } }];
 
+  ws['!rows'] = [
+    { hpt: 30 },
+  ];
+
   const colWidths = [{ wch: 12 }, { wch: 15 }];
   for (let i = 0; i < maxProducts; i++) {
     colWidths.push({ wch: 20 }, { wch: 12 }, { wch: 12 });
@@ -140,7 +140,8 @@ export function exportToExcel(
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${title}_${formatDateRange(dateFrom, dateTo).replace(/\s/g, '')}.xlsx`;
+  const fileDateStr = dateRangeText ? `_${dateRangeText.replace(/\s/g, '')}` : '';
+  a.download = `${title}${fileDateStr}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -148,8 +149,8 @@ export function exportToExcel(
 export function exportToPDF(
   orders: ExportOrder[],
   title: string,
-  dateFrom: string,
-  dateTo: string,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
   type: 'purchase' | 'sale'
 ) {
   const productMap = new Map<string, ProductInfo>();
@@ -169,6 +170,7 @@ export function exportToPDF(
   const maxProducts = Math.min(productList.length, 5);
 
   const dateRangeText = formatDateRange(dateFrom, dateTo);
+  const titleText = `${title}${dateRangeText ? `（${dateRangeText}）` : ''}`;
 
   const productHeaders = productList.slice(0, maxProducts).map((product, idx) => {
     const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
@@ -228,13 +230,13 @@ export function exportToPDF(
     @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Microsoft YaHei', 'SimHei', sans-serif; font-size: 12px; }
-    h1 { text-align: center; font-size: 18px; margin-bottom: 10px; }
+    h1 { text-align: center; font-size: 18px; margin-bottom: 10px; font-weight: bold; }
     table { width: 100%; border-collapse: collapse; }
     th { background-color: #f5f5f5; font-weight: 600; }
   </style>
 </head>
 <body>
-  <h1>${title}（${dateRangeText}）</h1>
+  <h1>${titleText}</h1>
   <table>
     <thead>
       <tr>
@@ -269,15 +271,21 @@ export function exportToPDF(
   }
 }
 
-function formatDateRange(dateFrom: string, dateTo: string): string {
+function formatDateRange(dateFrom: string | undefined, dateTo: string | undefined): string {
+  if (!dateFrom || !dateTo || dateFrom === '1970-01-01') {
+    return '';
+  }
   try {
     const from = new Date(dateFrom);
     const to = new Date(dateTo);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+      return '';
+    }
     const fromStr = format(from, 'yyyy年M月d日', { locale: zhCN });
     const toStr = format(to, 'yyyy年M月d日', { locale: zhCN });
     return `${fromStr} - ${toStr}`;
   } catch {
-    return `${dateFrom} - ${dateTo}`;
+    return '';
   }
 }
 
