@@ -12,9 +12,20 @@ async function apiGet(entity: string, params?: Record<string, string>, signal?: 
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
-  const res = await fetch(url.toString(), { signal });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  let lastError: Error | null = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(url.toString(), { signal });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      return res.json();
+    } catch (err) {
+      lastError = err as Error;
+      if (i < 2) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function apiPost(entity: string, data: unknown) {

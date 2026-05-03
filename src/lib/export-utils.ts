@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
@@ -23,19 +23,13 @@ interface ExportOrderItem {
   amount: number;
 }
 
-interface ProductInfo {
-  name: string;
-  spec?: string;
-  displayName: string;
-}
-
 const PRODUCT_COLORS = [
-  { bg: 'E6F3FF', font: '0066CC' },
-  { bg: 'FFF0E6', font: 'CC6600' },
-  { bg: 'E6FFE6', font: '009933' },
-  { bg: 'FFFDE6', font: '996600' },
-  { bg: 'F3E6FF', font: '6600CC' },
+  { bg: 'FFFF00', font: '000000' },
+  { bg: 'FFA500', font: '000000' },
+  { bg: 'ADD8E6', font: '000000' },
 ];
+
+const MAX_PRODUCTS = 3;
 
 export function exportToExcel(
   orders: ExportOrder[],
@@ -44,27 +38,11 @@ export function exportToExcel(
   dateTo: string | undefined,
   type: 'purchase' | 'sale'
 ) {
-  const productMap = new Map<string, ProductInfo>();
-  orders.forEach(order => {
-    order.items.forEach(item => {
-      const key = item.productName;
-      if (!productMap.has(key)) {
-        productMap.set(key, {
-          name: item.productName,
-          spec: item.spec,
-          displayName: item.spec ? `${item.productName}（${item.spec}）` : item.productName,
-        });
-      }
-    });
-  });
-  const productList = Array.from(productMap.values());
-  const maxProducts = Math.max(3, productList.length);
-
   const dateRangeText = formatDateRange(dateFrom, dateTo);
   const titleRow = [`${title}${dateRangeText ? `（${dateRangeText}）` : ''}`];
-  const headerRow = ['日期', type === 'purchase' ? '供应商' : '客户'];
+  const headerRow = ['订单编号', '日期', type === 'purchase' ? '供应商' : '客户'];
 
-  for (let i = 0; i < maxProducts; i++) {
+  for (let i = 0; i < MAX_PRODUCTS; i++) {
     headerRow.push(`产品-${i + 1}`);
     headerRow.push('单价（￥）');
     headerRow.push('重量（KG）');
@@ -74,14 +52,10 @@ export function exportToExcel(
 
   const dataRows: (string | number)[][] = [];
   orders.forEach(order => {
-    const row: (string | number)[] = [order.date, order.supplierOrCustomer];
-    const itemMap = new Map<string, ExportOrderItem>();
-    order.items.forEach(item => {
-      itemMap.set(item.productName, item);
-    });
+    const row: (string | number)[] = [order.orderNo, order.date, order.supplierOrCustomer];
 
-    productList.slice(0, maxProducts).forEach(product => {
-      const item = itemMap.get(product.name);
+    for (let i = 0; i < MAX_PRODUCTS; i++) {
+      const item = order.items[i];
       if (item) {
         row.push(item.spec ? `${item.productName}（${item.spec}）` : item.productName);
         row.push(item.unitPrice.toFixed(2));
@@ -89,10 +63,6 @@ export function exportToExcel(
       } else {
         row.push('', '', '');
       }
-    });
-
-    for (let i = productList.length; i < maxProducts; i++) {
-      row.push('', '', '');
     }
 
     row.push(
@@ -112,11 +82,43 @@ export function exportToExcel(
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } }];
 
   ws['!rows'] = [
-    { hpt: 30 },
+    { hpt: 35 },
   ];
 
-  const colWidths = [{ wch: 12 }, { wch: 15 }];
-  for (let i = 0; i < maxProducts; i++) {
+  const titleCell = ws['A1'];
+  if (titleCell) {
+    titleCell.s = {
+      alignment: { horizontal: 'center', vertical: 'center' },
+      font: { bold: true, sz: 16, name: 'Microsoft YaHei' },
+    };
+  }
+
+  const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 1, c });
+    const cell = ws[cellAddress];
+    if (cell) {
+      const productStartCol = 3;
+      const productEndCol = productStartCol + MAX_PRODUCTS * 3 - 1;
+      if (c >= productStartCol && c <= productEndCol) {
+        const productIndex = Math.floor((c - productStartCol) / 3);
+        const color = PRODUCT_COLORS[productIndex];
+        cell.s = {
+          fill: { fgColor: { rgb: color.bg } },
+          font: { bold: true, color: { rgb: color.font } },
+          alignment: { horizontal: 'center', vertical: 'center' },
+        };
+      } else {
+        cell.s = {
+          font: { bold: true },
+          alignment: { horizontal: 'center', vertical: 'center' },
+        };
+      }
+    }
+  }
+
+  const colWidths = [{ wch: 18 }, { wch: 12 }, { wch: 15 }];
+  for (let i = 0; i < MAX_PRODUCTS; i++) {
     colWidths.push({ wch: 20 }, { wch: 12 }, { wch: 12 });
   }
   colWidths.push({ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 });
@@ -147,27 +149,11 @@ export function exportToPDF(
   dateTo: string | undefined,
   type: 'purchase' | 'sale'
 ) {
-  const productMap = new Map<string, ProductInfo>();
-  orders.forEach(order => {
-    order.items.forEach(item => {
-      const key = item.productName;
-      if (!productMap.has(key)) {
-        productMap.set(key, {
-          name: item.productName,
-          spec: item.spec,
-          displayName: item.spec ? `${item.productName}（${item.spec}）` : item.productName,
-        });
-      }
-    });
-  });
-  const productList = Array.from(productMap.values());
-  const maxProducts = Math.min(productList.length, 5);
-
   const dateRangeText = formatDateRange(dateFrom, dateTo);
   const titleText = `${title}${dateRangeText ? `（${dateRangeText}）` : ''}`;
 
-  const productHeaders = Array.from({ length: maxProducts }, (_, idx) => {
-    const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
+  const productHeaders = Array.from({ length: MAX_PRODUCTS }, (_, idx) => {
+    const color = PRODUCT_COLORS[idx];
     return `
       <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">产品-${idx + 1}</th>
       <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">单价（￥）</th>
@@ -176,14 +162,9 @@ export function exportToPDF(
   }).join('');
 
   const rows = orders.map(order => {
-    const itemMap = new Map<string, ExportOrderItem>();
-    order.items.forEach(item => {
-      itemMap.set(item.productName, item);
-    });
-
-    const productCells = productList.slice(0, maxProducts).map((product, idx) => {
-      const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
-      const item = itemMap.get(product.name);
+    const productCells = Array.from({ length: MAX_PRODUCTS }, (_, idx) => {
+      const color = PRODUCT_COLORS[idx];
+      const item = order.items[idx];
       if (item) {
         const displayProduct = item.spec ? `${item.productName}（${item.spec}）` : item.productName;
         return `
@@ -201,6 +182,7 @@ export function exportToPDF(
 
     return `
       <tr>
+        <td style="padding: 6px 8px; border: 1px solid #ddd; text-align: center;">${order.orderNo}</td>
         <td style="padding: 6px 8px; border: 1px solid #ddd; text-align: center;">${order.date}</td>
         <td style="padding: 6px 8px; border: 1px solid #ddd;">${order.supplierOrCustomer}</td>
         ${productCells}
@@ -234,6 +216,7 @@ export function exportToPDF(
   <table>
     <thead>
       <tr>
+        <th style="padding: 8px 4px; border: 1px solid #333;">订单编号</th>
         <th style="padding: 8px 4px; border: 1px solid #333;">日期</th>
         <th style="padding: 8px 4px; border: 1px solid #333;">${type === 'purchase' ? '供应商' : '客户'}</th>
         ${productHeaders}
