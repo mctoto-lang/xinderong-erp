@@ -940,7 +940,7 @@ export default function SalesManagement() {
           </DialogHeader>
           <div
             ref={printContainerRef}
-            className="flex-1 overflow-hidden flex items-center justify-center bg-[#e5e7eb] px-4 pb-2"
+            className="flex-1 overflow-hidden flex items-center justify-center bg-white"
           >
             {selectedOrder && (
               <div
