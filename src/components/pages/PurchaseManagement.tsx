@@ -24,7 +24,7 @@ import {
   PaginationPrevious, PaginationNext, PaginationEllipsis,
 } from '@/components/ui/pagination';
 
-import { Plus, Search, FileSpreadsheet, Eye, Pencil, Trash2, CreditCard, CalendarIcon, Printer } from 'lucide-react';
+import { Plus, Search, FileSpreadsheet, Eye, Pencil, Trash2, CreditCard, CalendarIcon, Printer, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { dbPurchaseOrders, dbPurchaseOrderItems, dbPaymentRecords, dbSuppliers, dbAuditLogs, dbInventory, dbInventoryLogs, dbProductCategories, dbSystemSettings } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
@@ -37,6 +37,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { exportToExcel, exportToPDF, PAYMENT_STATUS_LABELS } from '@/lib/export-utils';
 import type { PurchaseOrder, PurchaseOrderItem, Supplier, PaymentRecord, ProductCategory } from '@/lib/types';
 
 // ─── Table Skeleton ────────────────────────────────────────
@@ -90,6 +91,7 @@ export default function PurchaseManagement() {
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const printContainerRef = useRef<HTMLDivElement>(null);
   const [printScale, setPrintScale] = useState(0.55);
 
@@ -468,26 +470,44 @@ export default function PurchaseManagement() {
   // Export Excel (CSV with BOM)
   const handleExport = () => {
     if (filtered.length === 0) { toast.error('没有可导出的数据'); return; }
-    const headers = ['订单编号', '日期', '供应商', '总金额', '运费', '已付款', '待付款', '付款状态'];
-    const rows = filtered.map(o => [
-      o.orderNo,
-      o.date,
-      o.supplierName,
-      o.totalAmount.toFixed(2),
-      o.freight.toFixed(2),
-      o.paidAmount.toFixed(2),
-      o.unpaidAmount.toFixed(2),
-      PAYMENT_STATUSES.find(s => s.value === o.paymentStatus)?.label || o.paymentStatus,
-    ]);
-    const csvContent = '\uFEFF' + [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `进货数据_${getTodayStr()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('导出成功');
+    setShowExportDialog(true);
+  };
+
+  const doExport = async (format: 'xlsx' | 'pdf') => {
+    setShowExportDialog(false);
+    if (filtered.length === 0) { toast.error('没有可导出的数据'); return; }
+
+    const exportOrders = await Promise.all(filtered.map(async (order) => {
+      const items = await dbPurchaseOrderItems.getByOrderId(order.id);
+      return {
+        orderNo: order.orderNo,
+        date: order.date,
+        supplierOrCustomer: order.supplierName,
+        items: items.map(item => ({
+          productName: item.productName,
+          weight: item.weight,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+        })),
+        totalWeight: items.reduce((sum, item) => sum + item.weight, 0),
+        totalAmount: order.totalAmount,
+        freight: order.freight,
+        paidAmount: order.paidAmount,
+        unpaidAmount: order.unpaidAmount,
+        paymentStatus: PAYMENT_STATUS_LABELS[order.paymentStatus] || order.paymentStatus,
+      };
+    }));
+
+    const dateFromStr = dateFrom ? dateFnsFormat(dateFrom, 'yyyy-MM-dd') : '1970-01-01';
+    const dateToStr = dateTo ? dateFnsFormat(dateTo, 'yyyy-MM-dd') : getTodayStr();
+
+    if (format === 'xlsx') {
+      exportToExcel(exportOrders, '进货表', dateFromStr, dateToStr, 'purchase');
+      toast.success('导出Excel成功');
+    } else {
+      exportToPDF(exportOrders, '进货表', dateFromStr, dateToStr, 'purchase');
+      toast.success('正在生成PDF...');
+    }
   };
 
   // Order item handlers
@@ -1140,6 +1160,33 @@ body{font-family:'Microsoft YaHei','SimHei',sans-serif;-webkit-print-color-adjus
               <Printer className="h-4 w-4" /> 打印单据
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Format Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>选择导出格式</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2 border-green-600 text-green-600 hover:bg-green-50"
+              onClick={() => doExport('xlsx')}
+            >
+              <FileSpreadsheet className="h-8 w-8" />
+              <span>Excel (.xlsx)</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2 border-red-600 text-red-600 hover:bg-red-50"
+              onClick={() => doExport('pdf')}
+            >
+              <FileText className="h-8 w-8" />
+              <span>PDF (.pdf)</span>
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
