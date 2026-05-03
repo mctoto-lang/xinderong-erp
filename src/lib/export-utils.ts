@@ -64,14 +64,8 @@ export function exportToExcel(
   const titleRow = [`${title}${dateRangeText ? `（${dateRangeText}）` : ''}`];
   const headerRow = ['日期', type === 'purchase' ? '供应商' : '客户'];
 
-  productList.slice(0, maxProducts).forEach((product, idx) => {
-    headerRow.push(product.displayName);
-    headerRow.push('单价（￥）');
-    headerRow.push('重量（KG）');
-  });
-
-  for (let i = productList.length; i < maxProducts; i++) {
-    headerRow.push(`产品${i + 1}`);
+  for (let i = 0; i < maxProducts; i++) {
+    headerRow.push(`产品-${i + 1}`);
     headerRow.push('单价（￥）');
     headerRow.push('重量（KG）');
   }
@@ -172,10 +166,10 @@ export function exportToPDF(
   const dateRangeText = formatDateRange(dateFrom, dateTo);
   const titleText = `${title}${dateRangeText ? `（${dateRangeText}）` : ''}`;
 
-  const productHeaders = productList.slice(0, maxProducts).map((product, idx) => {
+  const productHeaders = Array.from({ length: maxProducts }, (_, idx) => {
     const color = PRODUCT_COLORS[idx % PRODUCT_COLORS.length];
     return `
-      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">${product.displayName}</th>
+      <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">产品-${idx + 1}</th>
       <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">单价（￥）</th>
       <th style="background-color: #${color.bg}; color: #${color.font}; padding: 8px 4px; border: 1px solid #333; font-size: 11px; font-weight: 600;">重量（KG）</th>
     `;
