@@ -38,6 +38,7 @@ import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { exportToExcel, exportToPDF, PAYMENT_STATUS_LABELS } from '@/lib/export-utils';
+import { hasPermission } from '@/lib/permissions';
 import type { SalesOrder, SalesOrderItem, Customer, CollectionRecord, ProductCategory, Inventory } from '@/lib/types';
 
 // ─── Table Skeleton ────────────────────────────────────────
@@ -70,6 +71,10 @@ function TableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export default function SalesManagement() {
   const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
+  const canCreate = hasPermission(userRole, 'canCreate');
+  const canDelete = hasPermission(userRole, 'canDelete');
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [saleCategories, setSaleCategories] = useState<ProductCategory[]>([]);
@@ -484,7 +489,7 @@ export default function SalesManagement() {
               <SelectItem value="paid">已回清</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={openNewOrder} className="bg-black text-white hover:bg-gray-800">
+          <Button onClick={openNewOrder} className="bg-black text-white hover:bg-gray-800" disabled={!canCreate}>
             <Plus className="h-4 w-4 mr-1" /> 新建出货单
           </Button>
           <Button variant="outline" onClick={handleExport} className="border-green-600 text-green-600 hover:bg-green-50 hover:text-green-700">
@@ -536,9 +541,9 @@ export default function SalesManagement() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => viewDetail(order)} />
-                          <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditOrder(order)} />
-                          <IconButton icon={<CreditCard className="h-3.5 w-3.5" />} tooltip="回款" onClick={() => openCollection(order)} />
-                          <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(order.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                          {canEdit && <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEditOrder(order)} />}
+                          {canEdit && <IconButton icon={<CreditCard className="h-3.5 w-3.5" />} tooltip="回款" onClick={() => openCollection(order)} />}
+                          {canDelete && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(order.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
                         </div>
                       </TableCell>
                     </TableRow>

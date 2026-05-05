@@ -6,7 +6,7 @@ export interface User {
   username: string;
   password: string;
   name: string;
-  role: 'admin' | 'accountant' | 'sales' | 'readonly';
+  role: 'admin' | 'editor' | 'readonly';
   status: 'active' | 'disabled';
   lastLoginAt?: string;
   createdAt?: string;

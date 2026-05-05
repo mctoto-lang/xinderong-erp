@@ -31,10 +31,15 @@ import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { hasPermission } from '@/lib/permissions';
 import type { Customer, SalesOrder } from '@/lib/types';
 
 export default function CustomerManagement() {
   const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
+  const canCreate = hasPermission(userRole, 'canCreate');
+  const canDelete = hasPermission(userRole, 'canDelete');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +165,7 @@ export default function CustomerManagement() {
             <SelectTrigger className="w-32"><SelectValue placeholder="等级" /></SelectTrigger>
             <SelectContent><SelectItem value="all">全部</SelectItem>{CUSTOMER_LEVELS.map(l => <SelectItem key={l} value={l}>{l} 级</SelectItem>)}</SelectContent>
           </Select>
-          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增客户</Button>
+          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800" disabled={!canCreate}><Plus className="h-4 w-4 mr-1" />新增客户</Button>
         </div>
       </div>
 
@@ -185,8 +190,8 @@ export default function CustomerManagement() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-0.5">
                         <IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => viewDetail(c)} />
-                        <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(c)} />
-                        <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(c.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                        {canEdit && <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(c)} />}
+                        {canDelete && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(c.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
                       </div>
                     </TableCell>
                   </TableRow>

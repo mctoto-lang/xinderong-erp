@@ -76,10 +76,36 @@ export function exportToExcel(
     dataRows.push(row);
   });
 
-  const wsData = [titleRow, headerRow, ...dataRows];
+  const totalWeight = orders.reduce((sum, o) => sum + o.totalWeight, 0);
+  const totalAmountWithFreight = orders.reduce((sum, o) => sum + o.totalAmount + o.freight, 0);
+  const totalPaid = orders.reduce((sum, o) => sum + o.paidAmount, 0);
+  const totalUnpaid = orders.reduce((sum, o) => sum + o.unpaidAmount, 0);
+
+  const summaryRow: (string | number)[] = [];
+  for (let c = 0; c < headerRow.length; c++) {
+    summaryRow.push('');
+  }
+  const totalWeightCol = 3 + MAX_PRODUCTS * 3;
+  const totalAmountCol = totalWeightCol + 1;
+  const freightCol = totalWeightCol + 2;
+  const paidCol = totalWeightCol + 3;
+  const unpaidCol = totalWeightCol + 4;
+
+  summaryRow[0] = '合计';
+  summaryRow[totalWeightCol] = totalWeight.toFixed(2);
+  summaryRow[totalAmountCol] = totalAmountWithFreight.toFixed(2);
+  summaryRow[paidCol] = totalPaid.toFixed(2);
+  summaryRow[unpaidCol] = totalUnpaid.toFixed(2);
+
+  const wsData = [titleRow, headerRow, ...dataRows, summaryRow];
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } }];
+  const summaryRowIndex = dataRows.length + 2;
+
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headerRow.length - 1 } },
+    { s: { r: summaryRowIndex, c: totalAmountCol }, e: { r: summaryRowIndex, c: freightCol } },
+  ];
 
   ws['!rows'] = [
     { hpt: 35 },
@@ -114,6 +140,18 @@ export function exportToExcel(
           alignment: { horizontal: 'center', vertical: 'center' },
         };
       }
+    }
+  }
+
+  for (let c = 0; c < headerRow.length; c++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: summaryRowIndex, c });
+    const cell = ws[cellAddress];
+    if (cell && cell.v !== '' && cell.v !== undefined) {
+      cell.s = {
+        font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '333333' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+      };
     }
   }
 

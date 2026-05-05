@@ -36,6 +36,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { hasPermission } from '@/lib/permissions';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import type { LogisticsRecord, LogisticsStatus, PurchaseOrder, SalesOrder } from '@/lib/types';
@@ -142,6 +143,10 @@ function OrderSelectCombobox({
 
 export default function LogisticsManagement() {
   const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
+  const canCreate = hasPermission(userRole, 'canCreate');
+  const canDelete = hasPermission(userRole, 'canDelete');
   const [records, setRecords] = useState<LogisticsRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -263,7 +268,7 @@ export default function LogisticsManagement() {
           <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="搜索单据号/车牌/司机..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" /></div>
           <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-28"><SelectValue placeholder="类型" /></SelectTrigger><SelectContent><SelectItem value="all">全部</SelectItem><SelectItem value="purchase">采购</SelectItem><SelectItem value="sale">出货</SelectItem></SelectContent></Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-28"><SelectValue placeholder="状态" /></SelectTrigger><SelectContent><SelectItem value="all">全部</SelectItem><SelectItem value="pending">待发货</SelectItem><SelectItem value="in_transit">运输中</SelectItem><SelectItem value="arrived">已到达</SelectItem></SelectContent></Select>
-          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增</Button>
+          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800" disabled={!canCreate}><Plus className="h-4 w-4 mr-1" />新增物流记录</Button>
           <Button variant="outline" onClick={handleExport} className="border-green-600 text-green-600 hover:bg-green-50 hover:text-green-700"><FileDown className="h-4 w-4 mr-1" />导出Excel</Button>
         </div>
       </div>
@@ -282,8 +287,8 @@ export default function LogisticsManagement() {
                 <TableCell><StatusBadge status={r.status} statusMap={[...LOGISTICS_STATUSES]} /></TableCell>
                 <TableCell className="text-right"><div className="flex items-center justify-end gap-0.5">
                   <IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => { setSelected(r); setShowDetail(true); }} />
-                  <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(r)} />
-                  <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(r.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                  {canEdit && <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(r)} />}
+                  {canDelete && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(r.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
                 </div></TableCell>
               </TableRow>
             ))}</TableBody>

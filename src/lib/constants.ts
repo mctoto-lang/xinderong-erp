@@ -43,10 +43,9 @@ export const LOGISTICS_STATUSES = [
 
 export const CUSTOMER_LEVELS = ['A', 'B', 'C', 'D'] as const;
 export const USER_ROLES = [
-  { value: 'admin', label: '管理员' },
-  { value: 'accountant', label: '会计' },
-  { value: 'sales', label: '销售' },
-  { value: 'readonly', label: '只读' },
+  { value: 'admin', label: '管理员', description: '最高权限，可管理系统设置和用户' },
+  { value: 'editor', label: '可读可写', description: '可编辑订单，不可访问系统管理' },
+  { value: 'readonly', label: '只读', description: '仅可查看，禁止任何修改操作' },
 ] as const;
 
 // Inventory log types

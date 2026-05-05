@@ -27,11 +27,16 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { IconButton } from '@/components/shared/IconButton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useAppStore } from '@/lib/store';
+import { hasPermission } from '@/lib/permissions';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { toast } from 'sonner';
 import type { Inventory, InventoryLog } from '@/lib/types';
 
 export default function InventoryManagement() {
+  const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -284,7 +289,7 @@ export default function InventoryManagement() {
             ))}
           </div>
           <Button variant="outline" size="sm" onClick={() => { setSearchTerm(''); setTabFilter('all'); loadData(); }}><RotateCcw className="h-4 w-4 mr-1" />重置筛选</Button>
-          <Button variant="outline" size="sm" onClick={() => setShowResetConfirm(true)} className="text-red-600 hover:text-red-700 hover:bg-red-50"><RefreshCw className="h-4 w-4 mr-1" />重置库存</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowResetConfirm(true)} className="text-red-600 hover:text-red-700 hover:bg-red-50" disabled={!canEdit}><RefreshCw className="h-4 w-4 mr-1" />重置库存</Button>
         </div>
       </div>
 
@@ -313,7 +318,7 @@ export default function InventoryManagement() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看日志" onClick={() => viewLogs(item)} />
-                          <IconButton icon={<Settings2 className="h-3.5 w-3.5" />} tooltip="设置预警阈值" onClick={() => openThreshold(item)} />
+                          {canEdit && <IconButton icon={<Settings2 className="h-3.5 w-3.5" />} tooltip="设置预警阈值" onClick={() => openThreshold(item)} />}
                         </div>
                       </TableCell>
                     </TableRow>

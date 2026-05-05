@@ -32,6 +32,7 @@ import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { hasPermission } from '@/lib/permissions';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import type { ProductionOrder, ProductionOrderItem, ProductCategory } from '@/lib/types';
 
@@ -55,6 +56,10 @@ function StatusDot({ status }: { status: string }) {
 
 export default function ProductionManagement() {
   const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
+  const canCreate = hasPermission(userRole, 'canCreate');
+  const canDelete = hasPermission(userRole, 'canDelete');
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -496,7 +501,7 @@ export default function ProductionManagement() {
               <SelectItem value="completed">已完成</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={() => { resetForm(); setShowNewDialog(true); }} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新建生产单</Button>
+          <Button onClick={() => { resetForm(); setShowNewDialog(true); }} className="bg-black text-white hover:bg-gray-800" disabled={!canCreate}><Plus className="h-4 w-4 mr-1" />新建生产单</Button>
           <Button variant="outline" onClick={handleExport} className="border-green-600 text-green-600 hover:bg-green-50 hover:text-green-700"><FileDown className="h-4 w-4 mr-1" />导出Excel</Button>
         </div>
       </div>
@@ -532,13 +537,13 @@ export default function ProductionManagement() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => viewDetail(order)} />
-                        {order.status === 'pending' && (
+                        {canEdit && order.status === 'pending' && (
                           <IconButton icon={<Play className="h-3.5 w-3.5" />} tooltip="开始加工" onClick={() => startProcessing(order)} />
                         )}
-                        {order.status === 'processing' && (
+                        {canEdit && order.status === 'processing' && (
                           <IconButton icon={<CheckCircle2 className="h-3.5 w-3.5" />} tooltip="完工录入" onClick={() => openComplete(order)} />
                         )}
-                        <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(order.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />
+                        {canDelete && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(order.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}
                       </div>
                     </TableCell>
                   </TableRow>

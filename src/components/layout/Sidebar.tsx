@@ -95,6 +95,8 @@ const navGroups = [
     items: [
       { key: 'charts' as ModuleKey, label: '图表分析', icon: 'BarChart3' },
       { key: 'logistics' as ModuleKey, label: '物流运输', icon: 'Package' },
+    ],
+    adminOnlyItems: [
       { key: 'system' as ModuleKey, label: '系统管理', icon: 'Settings' },
     ],
   },
@@ -106,13 +108,19 @@ function NavGroup({
   group,
   activeModule,
   onNavigate,
+  currentUserRole,
 }: {
   group: (typeof navGroups)[number];
   activeModule: ModuleKey;
   onNavigate: (key: ModuleKey) => void;
+  currentUserRole?: string;
 }) {
   const GroupIcon = group.icon;
   const [open, setOpen] = React.useState(group.defaultOpen);
+  const isAdmin = currentUserRole === 'admin';
+  const allItems = isAdmin && group.adminOnlyItems
+    ? [...group.items, ...group.adminOnlyItems]
+    : group.items;
 
   return (
     <Collapsible
@@ -130,7 +138,7 @@ function NavGroup({
         </CollapsibleTrigger>
         <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
           <SidebarMenuSub>
-            {group.items.map((item) => {
+            {allItems.map((item) => {
               const Icon = iconMap[item.icon] || IconDashboard;
               return (
                 <SidebarMenuSubItem key={item.key}>
@@ -207,6 +215,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   group={group}
                   activeModule={activeModule}
                   onNavigate={setActiveModule}
+                  currentUserRole={currentUser?.role}
                 />
               ))}
             </SidebarMenu>
@@ -255,12 +264,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem className="cursor-pointer" onClick={() => setActiveModule('system')}>
-                    <IconUserCircle className="mr-2 size-4" />
-                    个人设置
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
+                {currentUser?.role === 'admin' && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem className="cursor-pointer" onClick={() => setActiveModule('system')}>
+                      <IconUserCircle className="mr-2 size-4" />
+                      个人设置
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer text-red-600"

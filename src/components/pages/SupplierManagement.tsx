@@ -30,10 +30,15 @@ import { IconButton } from '@/components/shared/IconButton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingSkeleton } from '@/components/shared/LoadingSkeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { hasPermission } from '@/lib/permissions';
 import type { Supplier, PurchaseOrder } from '@/lib/types';
 
 export default function SupplierManagement() {
   const { currentUser } = useAppStore();
+  const userRole = currentUser?.role || 'readonly';
+  const canEdit = hasPermission(userRole, 'canEdit');
+  const canCreate = hasPermission(userRole, 'canCreate');
+  const canDelete = hasPermission(userRole, 'canDelete');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,7 +137,7 @@ export default function SupplierManagement() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="搜索供应商名称、联系人、电话..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" /></div>
           <Select value={ratingFilter} onValueChange={setRatingFilter}><SelectTrigger className="w-32"><SelectValue placeholder="评级" /></SelectTrigger><SelectContent><SelectItem value="all">全部</SelectItem>{['A','B','C','D'].map(r => <SelectItem key={r} value={r}>{r}级</SelectItem>)}</SelectContent></Select>
-          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800"><Plus className="h-4 w-4 mr-1" />新增供应商</Button>
+          <Button onClick={openNew} className="bg-black text-white hover:bg-gray-800" disabled={!canCreate}><Plus className="h-4 w-4 mr-1" />新增供应商</Button>
         </div>
       </div>
       <div className="rounded-lg border border-gray-200 bg-background overflow-hidden">
@@ -142,7 +147,9 @@ export default function SupplierManagement() {
             <TableBody>{paginatedSuppliers.map(s => {
               const oc = purchaseOrders.filter(o => o.supplierId === s.id).length;
               const debt = purchaseOrders.filter(o => o.supplierId === s.id).reduce((sum, o) => sum + o.unpaidAmount, 0);
-              return (<TableRow key={s.id}><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.contactPerson}</TableCell><TableCell>{s.phone}</TableCell><TableCell className="max-w-[120px] truncate">{s.address}</TableCell><TableCell>{s.mainProducts}</TableCell><TableCell><Badge variant="secondary" className="bg-gray-100">{s.rating}级</Badge></TableCell><TableCell className="text-right">{oc}</TableCell><TableCell className={`text-right font-mono ${debt > 0 ? 'text-orange-600' : ''}`}>{formatMoney(debt)}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-0.5"><IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => viewDetail(s)} /><IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(s)} /><IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(s.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" /></div></TableCell></TableRow>);
+              return (<TableRow key={s.id}><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.contactPerson}</TableCell><TableCell>{s.phone}</TableCell><TableCell className="max-w-[120px] truncate">{s.address}</TableCell><TableCell>{s.mainProducts}</TableCell><TableCell><Badge variant="secondary" className="bg-gray-100">{s.rating}级</Badge></TableCell><TableCell className="text-right">{oc}</TableCell><TableCell className={`text-right font-mono ${debt > 0 ? 'text-orange-600' : ''}`}>{formatMoney(debt)}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-0.5"><IconButton icon={<Eye className="h-3.5 w-3.5" />} tooltip="查看详情" onClick={() => viewDetail(s)} />
+                        {canEdit && <IconButton icon={<Pencil className="h-3.5 w-3.5" />} tooltip="编辑" onClick={() => openEdit(s)} />}
+                        {canDelete && <IconButton icon={<Trash2 className="h-3.5 w-3.5" />} tooltip="删除" onClick={() => setConfirmDelete(s.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50" />}</div></TableCell></TableRow>);
             })}</TableBody>
           </Table></div>
         )}
